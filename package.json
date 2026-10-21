@@ -1,0 +1,17 @@
+{
+  "name": "pc-space-manager",
+  "version": "1.0.0",
+  "description": "Administrador personal de espacio en PC y limpiador inteligente inspirado en la ingeniería inversa de Glary Utilities",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "disk-cleaner",
+    "disk-analyzer",
+    "pc-maintenance",
+    "glary-utilities-clone"
+  ],
+  "author": "Adrian Plaza",
+  "license": "MIT"
+}

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PC Space Manager — Administrador y Limpiador de Disco</title>
+  <meta name="description" content="Herramienta avanzada de gestión, análisis y limpieza inteligente de espacio en disco inspirada en la arquitectura de Glary Utilities.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar de Navegación -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h2>SpaceManager</h2>
+          <span class="brand-badge">PRO v1.0</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="dashboard" id="btn-tab-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>Panel de Unidades</span>
+        </button>
+        <button class="nav-item" data-tab="cleaner" id="btn-tab-cleaner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+          <span>Limpiador Inteligente</span>
+          <span class="nav-badge" id="cleaner-badge">Glary Engine</span>
+        </button>
+        <button class="nav-item" data-tab="analyzer" id="btn-tab-analyzer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Analizador de Disco</span>
+        </button>
+        <button class="nav-item" data-tab="duplicates" id="btn-tab-duplicates">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Archivos Duplicados</span>
+        </button>
+        <button class="nav-item" data-tab="empty-folders" id="btn-tab-empty">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+          <span>Carpetas Vacías</span>
+        </button>
+        <button class="nav-item" data-tab="logs" id="btn-tab-logs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span>Registro de Auditoría</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sys-summary">
+          <div class="sys-dot"></div>
+          <div class="sys-info-text">
+            <span id="sys-hostname">Cargando PC...</span>
+            <small id="sys-os">Windows 10/11</small>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Contenido Principal -->
+    <main class="main-content">
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="page-title">Panel de Unidades de Almacenamiento</h1>
+          <p id="page-subtitle">Estado en tiempo real de discos y espacio disponible en tu PC</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="recycle-widget" id="recycle-widget" title="Papelera de reciclaje">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span id="recycle-status">Papelera: ...</span>
+            <button class="btn-subtle-icon" id="btn-empty-recycle" title="Vaciar papelera de reciclaje">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <button class="btn btn-secondary" id="btn-refresh-drives">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>Actualizar</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- SECCIÓN 1: DASHBOARD DE UNIDADES -->
+      <section class="tab-pane active" id="pane-dashboard">
+        <!-- Alerta de espacio bajo si aplica -->
+        <div class="alert-banner warning" id="c-drive-warning" style="display: none;">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-body">
+            <h4>¡Atención! Espacio crítico en Unidad C:</h4>
+            <p>Tu unidad principal de sistema tiene menos de 15 GB libres. Ejecuta el <strong>Limpiador Inteligente</strong> para recuperar espacio vital.</p>
+          </div>
+          <button class="btn btn-warning" id="btn-quick-clean-c">Escanear Basura Ahora</button>
+        </div>
+
+        <div class="drives-grid" id="drives-container">
+          <!-- Renderizado dinámico de tarjetas de discos -->
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+
+        <!-- Métricas del sistema -->
+        <div class="system-stats-card">
+          <div class="card-header">
+            <h3>Rendimiento y Recursos del Sistema</h3>
+            <span class="badge-neutral">Métricas en vivo</span>
+          </div>
+          <div class="stats-row">
+            <div class="stat-box">
+              <span class="stat-label">Memoria RAM Total</span>
+              <span class="stat-value" id="stat-ram-total">...</span>
+              <div class="stat-progress"><div class="stat-bar" id="ram-bar" style="width: 0%"></div></div>
+              <small id="stat-ram-detail">Cargando...</small>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Procesador (CPU)</span>
+              <span class="stat-value" id="stat-cpu-model">...</span>
+              <small id="stat-cpu-cores">... núcleos detectados</small>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Usuario & Sistema</span>
+              <span class="stat-value" id="stat-user-os">...</span>
+              <small id="stat-uptime">Tiempo encendido: ...</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 2: LIMPIADOR INTELIGENTE (Inspirado en Glary Disk Cleaner) -->
+      <section class="tab-pane" id="pane-cleaner">
+        <div class="cleaner-hero">
+          <div class="hero-left">
+            <h2>Limpiador de Archivos Basura y Caché</h2>
+            <p>Basado en las reglas y patrones descompilados de Glary Utilities: elimina de forma segura temporales, volcados de memoria, cachés de navegador y residuos sin tocar archivos del sistema.</p>
+            <div class="cleaner-controls">
+              <button class="btn btn-primary" id="btn-scan-junk">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Analizar Basura</span>
+              </button>
+              <button class="btn btn-danger" id="btn-clean-junk" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Limpiar Seleccionados</span>
+              </button>
+              <label class="toggle-control" title="Simula el borrado sin eliminar ningún archivo para verificar con total seguridad">
+                <input type="checkbox" id="chk-dry-run">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Modo Simulación (Dry-Run Seguro)</span>
+              </label>
+            </div>
+          </div>
+          <div class="hero-metric">
+            <span class="metric-label">Espacio Recuperable</span>
+            <span class="metric-number" id="junk-total-size">0.00 MB</span>
+            <span class="metric-sub" id="junk-total-files">0 archivos candidatos</span>
+          </div>
+        </div>
+
+        <div class="category-selection-toolbar">
+          <span>Categorías de Limpieza</span>
+          <div class="toolbar-buttons">
+            <button class="btn-link" id="btn-select-all-cats">Seleccionar todas</button>
+            <span class="divider">|</span>
+            <button class="btn-link" id="btn-deselect-all-cats">Deseleccionar</button>
+          </div>
+        </div>
+
+        <div class="categories-grid" id="categories-container">
+          <div class="empty-state">
+            <p>Presiona <strong>"Analizar Basura"</strong> para escanear las cachés y archivos temporales del equipo.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 3: ANALIZADOR DE DISCO (Disk Analysis) -->
+      <section class="tab-pane" id="pane-analyzer">
+        <div class="panel-card">
+          <div class="analyzer-target-bar">
+            <label for="analyzer-path-input">Carpeta o Unidad a Inspeccionar:</label>
+            <div class="input-with-button">
+              <input type="text" id="analyzer-path-input" placeholder="Ejemplo: C:\ o D:\ o C:\Users\adrip" value="C:\">
+              <button class="btn btn-primary" id="btn-start-analysis">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Iniciar Análisis</span>
+              </button>
+            </div>
+          </div>
+          <div class="quick-chips" id="quick-paths-chips">
+            <span class="chip-label">Accesos rápidos:</span>
+            <!-- Renderizado dinámico de chips rápidos -->
+          </div>
+        </div>
+
+        <!-- Resultados del análisis -->
+        <div class="analysis-results" id="analysis-results" style="display: none;">
+          <div class="analysis-summary-row">
+            <div class="summary-metric-card">
+              <span>Espacio Total Analizado</span>
+              <h3 id="an-total-bytes">0 GB</h3>
+            </div>
+            <div class="summary-metric-card">
+              <span>Archivos Contabilizados</span>
+              <h3 id="an-total-files">0</h3>
+            </div>
+            <div class="summary-metric-card">
+              <span>Carpetas Exploradas</span>
+              <h3 id="an-total-folders">0</h3>
+            </div>
+          </div>
+
+          <!-- Distribución por Tipos (Category.ini) -->
+          <div class="category-distribution-card">
+            <h3>Distribución por Categorías de Archivos</h3>
+            <div class="distribution-stacked-bar" id="dist-stacked-bar"></div>
+            <div class="distribution-legend" id="dist-legend"></div>
+          </div>
+
+          <!-- Pestañas de detalle: Top Archivos vs Subcarpetas -->
+          <div class="analysis-details-tabs">
+            <div class="subtabs">
+              <button class="subtab active" data-subtab="subtab-files">Top 50 Archivos Más Pesados</button>
+              <button class="subtab" data-subtab="subtab-folders">Subcarpetas de Mayor Tamaño</button>
+            </div>
+
+            <div class="subtab-content active" id="subtab-files">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre del Archivo</th>
+                      <th>Categoría</th>
+                      <th>Tamaño</th>
+                      <th>Ubicación Completa</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="top-files-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="subtab-content" id="subtab-folders">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre de Carpeta</th>
+                      <th>Tamaño Acumulado</th>
+                      <th>Porcentaje</th>
+                      <th>Ruta</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="top-folders-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 4: ARCHIVOS DUPLICADOS -->
+      <section class="tab-pane" id="pane-duplicates">
+        <div class="panel-card">
+          <div class="analyzer-target-bar">
+            <label for="dup-path-input">Carpeta para Buscar Duplicados:</label>
+            <div class="input-with-button">
+              <input type="text" id="dup-path-input" placeholder="Ruta a inspeccionar (Ej: C:\Users\adrip\Downloads)">
+              <button class="btn btn-primary" id="btn-scan-duplicates">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Buscar Duplicados</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="duplicates-header" id="dup-summary-bar" style="display: none;">
+          <div>
+            <h3>Grupos de Archivos Idénticos Encontrados: <span id="dup-groups-count">0</span></h3>
+            <p>Espacio recuperable estimado: <strong id="dup-wasted-size" class="text-gradient">0 MB</strong></p>
+          </div>
+          <button class="btn btn-danger" id="btn-clean-duplicates" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span>Eliminar Duplicados Seleccionados</span>
+          </button>
+        </div>
+
+        <div class="duplicates-list" id="duplicates-container">
+          <div class="empty-state">
+            <p>Selecciona una carpeta (por ejemplo tu carpeta de <em>Descargas</em> o <em>Documentos</em>) y presiona <strong>"Buscar Duplicados"</strong> para encontrar copias exactas por hash SHA-256.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 5: CARPETAS VACÍAS -->
+      <section class="tab-pane" id="pane-empty-folders">
+        <div class="panel-card">
+          <div class="analyzer-target-bar">
+            <label for="empty-path-input">Escanear Carpetas Vacías en:</label>
+            <div class="input-with-button">
+              <input type="text" id="empty-path-input" placeholder="Ruta a escanear">
+              <button class="btn btn-primary" id="btn-scan-empty">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Buscar Carpetas Vacías</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="duplicates-header" id="empty-summary-bar" style="display: none;">
+          <div>
+            <h3>Carpetas Vacías Detectadas: <span id="empty-count">0</span></h3>
+            <p class="text-muted">Protegido por la lista de exclusiones seguras del sistema.</p>
+          </div>
+          <button class="btn btn-danger" id="btn-clean-empty">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span>Eliminar Carpetas Vacías</span>
+          </button>
+        </div>
+
+        <div class="empty-folders-list" id="empty-folders-container">
+          <div class="empty-state">
+            <p>Haz clic en <strong>"Buscar Carpetas Vacías"</strong> para limpiar directorios huérfanos sin contenido.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 6: REGISTRO DE AUDITORÍA -->
+      <section class="tab-pane" id="pane-logs">
+        <div class="panel-card">
+          <div class="card-header">
+            <h3>Registro de Operaciones del Sistema</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-clear-logs">Limpiar Registro</button>
+          </div>
+          <div class="terminal-log" id="terminal-log-content">
+            <div class="log-entry info"><span class="log-time">[Inicio]</span> Administrador de Espacio iniciado. Motor listo.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal para ver archivos de muestra de una categoría -->
+  <div class="modal-backdrop" id="sample-modal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-category-title">Detalle de Archivos</h3>
+        <button class="btn-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Archivo</th>
+                <th>Tamaño</th>
+                <th>Ruta</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="modal-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notificaciones Toast flotantes -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
