@@ -47,6 +47,11 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           <span>Archivos Duplicados</span>
         </button>
+                <button class="nav-item" data-tab="mobile" id="btn-tab-mobile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+          <span>Dispositivo Móvil</span>
+          <span class="nav-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">USB / ADB</span>
+        </button>
         <button class="nav-item" data-tab="empty-folders" id="btn-tab-empty">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="9" y1="14" x2="15" y2="14"></line></svg>
           <span>Carpetas Vacías</span>
@@ -330,6 +335,107 @@
         <div class="empty-folders-list" id="empty-folders-container">
           <div class="empty-state">
             <p>Haz clic en <strong>"Buscar Carpetas Vacías"</strong> para limpiar directorios huérfanos sin contenido.</p>
+          </div>
+        </div>
+      </section>
+
+            <!-- SECCIÓN MÓVIL: SAMSUNG & ANDROID VIA USB/ADB -->
+      <section class="tab-pane" id="pane-mobile">
+        <!-- Estado de Conexión del Teléfono -->
+        <div class="panel-card" id="mobile-connection-card">
+          <div class="card-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="drive-icon" style="background: rgba(16, 185, 129, 0.1); color: #34d399;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              </div>
+              <div>
+                <h3 id="mobile-device-name">Buscando dispositivo Android conectado por USB...</h3>
+                <span id="mobile-device-details" style="font-size: 0.82rem; color: var(--text-dim);">Motor ADB Oficial de Alta Velocidad</span>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-mobile">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <span>Comprobar Teléfono</span>
+            </button>
+          </div>
+
+          <!-- Banner de instrucciones si no está autorizado o conectado -->
+          <div class="alert-banner warning" id="mobile-help-banner" style="display: none; margin-top: 16px;">
+            <div class="alert-icon">📲</div>
+            <div class="alert-body">
+              <h4 id="mobile-help-title">Cómo conectar tu Samsung para análisis rápido:</h4>
+              <p id="mobile-help-text">
+                1. Conecta tu teléfono con el cable USB a la PC.<br>
+                2. En tu móvil activa <strong>"Depuración por USB"</strong> (Ajustes ➔ Opciones de desarrollador).<br>
+                3. Desbloquea la pantalla y en el aviso selecciona <strong>"Permitir siempre desde esta computadora"</strong>.
+              </p>
+            </div>
+          </div>
+
+          <!-- Barra de almacenamiento del móvil (cuando está conectado) -->
+          <div id="mobile-storage-box" style="display: none; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem;">
+              <span>Almacenamiento Interno del Teléfono</span>
+              <span id="mobile-storage-text" style="font-family: var(--font-mono); font-weight: 600; color: #38bdf8;">-- / --</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill normal" id="mobile-storage-bar" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de control de escaneo móvil -->
+        <div class="cleaner-hero" id="mobile-scan-hero" style="display: none;">
+          <div class="hero-left">
+            <h2>Auditoría Granular de Archivos del Celular</h2>
+            <p>A diferencia del limpiador de Samsung que borra a ciegas, aquí puedes inspeccionar exactamente los videos enviados duplicados de WhatsApp, audios, fotos pesadas y cachés ocultas.</p>
+            <div class="cleaner-controls">
+              <button class="btn btn-primary" id="btn-scan-mobile">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Analizar Almacenamiento Móvil</span>
+              </button>
+              <button class="btn btn-danger" id="btn-clean-mobile" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Eliminar Seleccionados</span>
+              </button>
+              <button class="btn btn-secondary" id="btn-backup-mobile" disabled title="Transfiere los archivos pesados a tu disco D: en la PC antes de borrarlos">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Mover a PC (Disco D:)</span>
+              </button>
+              <label class="toggle-control" title="Simula la operación sin borrar ningún archivo">
+                <input type="checkbox" id="chk-mobile-dry-run">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Modo Simulación (Dry-Run)</span>
+              </label>
+            </div>
+          </div>
+          <div class="hero-metric">
+            <span class="metric-label">Espacio Recuperable Móvil</span>
+            <span class="metric-number" id="mobile-recoverable-size">0.00 MB</span>
+            <span class="metric-sub" id="mobile-categories-count">0 categorías analizadas</span>
+          </div>
+        </div>
+
+        <!-- Categorías de escaneo móvil -->
+        <div class="categories-grid" id="mobile-categories-grid" style="display: none; margin-bottom: 24px;"></div>
+
+        <!-- Top archivos más pesados en el móvil -->
+        <div class="panel-card" id="mobile-heavy-card" style="display: none;">
+          <div class="card-header">
+            <h3>Archivos Más Pesados en el Celular (>30 MB)</h3>
+            <span class="badge-neutral" id="mobile-heavy-badge">0 archivos encontrados</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nombre de Archivo</th>
+                  <th>Tamaño</th>
+                  <th>Ruta en Teléfono</th>
+                </tr>
+              </thead>
+              <tbody id="mobile-heavy-tbody"></tbody>
+            </table>
           </div>
         </div>
       </section>

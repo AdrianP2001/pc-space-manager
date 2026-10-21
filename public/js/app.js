@@ -12,7 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     duplicatesData: null,
     selectedDuplicates: new Set(),
     emptyFoldersData: null,
-    selectedEmptyFolders: new Set()
+    selectedEmptyFolders: new Set(),
+    mobileDevice: null,
+    mobileScan: null,
+    selectedMobileCategories: new Set(),
+    mobileDryRun: false
   };
 
   // Elementos DOM principales
@@ -87,6 +91,10 @@ document.addEventListener('DOMContentLoaded', () => {
     'empty-folders': {
       title: 'Limpiador de Carpetas Vacías',
       subtitle: 'Depura directorios sin contenido con filtros de seguridad'
+    },
+    mobile: {
+      title: 'Dispositivo Móvil (Samsung / Android)',
+      subtitle: 'Auditoría y limpieza de almacenamiento a través de conexión USB de alta velocidad'
     },
     logs: {
       title: 'Registro de Auditoría',
@@ -837,6 +845,302 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error(e);
     }
   }
+
+  
+  // ==========================================
+  // SECCIÓN MÓVIL: SAMSUNG & ANDROID VIA ADB
+  // ==========================================
+  const btnRefreshMobile = document.getElementById('btn-refresh-mobile');
+  const btnScanMobile = document.getElementById('btn-scan-mobile');
+  const btnCleanMobile = document.getElementById('btn-clean-mobile');
+  const btnBackupMobile = document.getElementById('btn-backup-mobile');
+  const chkMobileDryRun = document.getElementById('chk-mobile-dry-run');
+
+  async function checkMobileStatus() {
+    try {
+      const res = await fetch('/api/mobile/status');
+      const data = await res.json();
+      renderMobileStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function renderMobileStatus(data) {
+    const nameEl = document.getElementById('mobile-device-name');
+    const detailsEl = document.getElementById('mobile-device-details');
+    const helpBanner = document.getElementById('mobile-help-banner');
+    const storageBox = document.getElementById('mobile-storage-box');
+    const scanHero = document.getElementById('mobile-scan-hero');
+
+    if (!data.connected || data.devices.length === 0) {
+      nameEl.textContent = 'Ningún teléfono detectado por USB';
+      detailsEl.textContent = 'Conecta tu Samsung con el cable USB y activa la Depuración por USB';
+      helpBanner.style.display = 'flex';
+      storageBox.style.display = 'none';
+      scanHero.style.display = 'none';
+      state.mobileDevice = null;
+      return;
+    }
+
+    const device = data.devices[0];
+    state.mobileDevice = device;
+
+    if (!device.authorized) {
+      nameEl.textContent = device.name;
+      detailsEl.textContent = 'Esperando confirmación en la pantalla del celular...';
+      helpBanner.style.display = 'flex';
+      document.getElementById('mobile-help-title').textContent = '⚠️ Requiere autorización en tu teléfono:';
+      document.getElementById('mobile-help-text').innerHTML = 'Desbloquea la pantalla de tu Samsung. Te aparecerá un diálogo con el título: <strong>"¿Permitir depuración por USB desde esta computadora?"</strong>. Marca la casilla <em>"Permitir siempre"</em> y pulsa <strong>Permitir</strong>.';
+      storageBox.style.display = 'none';
+      scanHero.style.display = 'none';
+      return;
+    }
+
+    // Dispositivo conectado y autorizado con éxito
+    nameEl.textContent = `${device.manufacturer} ${device.model}`;
+    detailsEl.textContent = `${device.androidVersion} — Conexión directa USB establecida (Serial: ${device.serial})`;
+    helpBanner.style.display = 'none';
+
+    // Barra de almacenamiento
+    if (device.storage && device.storage.totalBytes > 0) {
+      storageBox.style.display = 'block';
+      const st = device.storage;
+      document.getElementById('mobile-storage-text').textContent = `${formatBytes(st.usedBytes)} usados / ${formatBytes(st.totalBytes)} totales (${st.percent}%)`;
+      const bar = document.getElementById('mobile-storage-bar');
+      bar.style.width = `${st.percent}%`;
+      bar.className = st.percent >= 90 ? 'progress-fill danger' : 'progress-fill normal';
+    }
+
+    scanHero.style.display = 'flex';
+    logActivity(`Dispositivo móvil conectado: ${device.manufacturer} ${device.model} (${device.androidVersion})`, 'success');
+  }
+
+  btnRefreshMobile.addEventListener('click', () => {
+    checkMobileStatus();
+    showToast('Consultando estado del teléfono...', 'info');
+  });
+
+  chkMobileDryRun.addEventListener('change', (e) => {
+    state.mobileDryRun = e.target.checked;
+    if (state.mobileDryRun) {
+      btnCleanMobile.innerHTML = '<span>Simular Limpieza Móvil</span>';
+      btnCleanMobile.className = 'btn btn-warning';
+    } else {
+      btnCleanMobile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg><span>Eliminar Seleccionados</span>';
+      btnCleanMobile.className = 'btn btn-danger';
+    }
+  });
+
+  btnScanMobile.addEventListener('click', async () => {
+    if (!state.mobileDevice || !state.mobileDevice.authorized) {
+      showToast('Por favor autoriza la depuración USB en tu teléfono primero', 'error');
+      return;
+    }
+
+    btnScanMobile.disabled = true;
+    btnScanMobile.innerHTML = '<span>Inspeccionando almacenamiento...</span>';
+    logActivity('Iniciando auditoría rápida de carpetas de WhatsApp, Cámara y Descargas en Android...', 'info');
+
+    try {
+      const res = await fetch('/api/mobile/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serial: state.mobileDevice.serial })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      state.mobileScan = data;
+      state.selectedMobileCategories.clear();
+      data.categories.forEach(c => {
+        if (c.recommendedAction === 'clean') {
+          state.selectedMobileCategories.add(c.id);
+        }
+      });
+
+      renderMobileCategories(data.categories);
+      renderMobileHeavyFiles(data.topHeavyFiles);
+      updateMobileTotals();
+
+      btnCleanMobile.disabled = false;
+      btnBackupMobile.disabled = false;
+      showToast(`Auditoría móvil finalizada: ${formatBytes(data.cleanableBytes)} recuperables`, 'success');
+      logActivity(`Auditoría finalizada: ${formatBytes(data.grandTotalBytes)} analizados en el celular`, 'success');
+    } catch (err) {
+      logActivity(`Error en análisis móvil: ${err.message}`, 'error');
+      showToast(`Error: ${err.message}`, 'error');
+    } finally {
+      btnScanMobile.disabled = false;
+      btnScanMobile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Analizar Almacenamiento Móvil</span>';
+    }
+  });
+
+  function renderMobileCategories(categories) {
+    const grid = document.getElementById('mobile-categories-grid');
+    grid.style.display = 'grid';
+    grid.innerHTML = '';
+
+    categories.forEach(cat => {
+      const card = document.createElement('div');
+      card.className = 'category-card';
+
+      card.innerHTML = `
+        <input type="checkbox" class="cat-checkbox" data-id="${cat.id}" ${state.selectedMobileCategories.has(cat.id) ? 'checked' : ''}>
+        <div class="cat-icon-wrap" style="color: ${cat.recommendedAction === 'clean' ? '#f87171' : '#38bdf8'}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line>
+          </svg>
+        </div>
+        <div class="cat-details">
+          <h4>${escapeHtml(cat.name)}</h4>
+          <p>${escapeHtml(cat.description)}</p>
+          <small style="color: var(--text-dim); font-family: var(--font-mono);">${escapeHtml(cat.path)}</small>
+        </div>
+        <div class="cat-stats">
+          <span class="cat-size">${formatBytes(cat.totalBytes)}</span>
+          <span class="cat-count">${cat.count} archivos</span>
+        </div>
+      `;
+
+      const chk = card.querySelector('.cat-checkbox');
+      chk.addEventListener('change', (e) => {
+        if (e.target.checked) state.selectedMobileCategories.add(cat.id);
+        else state.selectedMobileCategories.delete(cat.id);
+        updateMobileTotals();
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function renderMobileHeavyFiles(files) {
+    const card = document.getElementById('mobile-heavy-card');
+    const tbody = document.getElementById('mobile-heavy-tbody');
+    const badge = document.getElementById('mobile-heavy-badge');
+
+    if (!files || files.length === 0) {
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = 'block';
+    badge.textContent = `${files.length} archivos grandes`;
+    tbody.innerHTML = '';
+
+    files.forEach(f => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="file-name-cell"><strong>${escapeHtml(f.name)}</strong></td>
+        <td class="file-size-cell" style="color: #f87171;">${formatBytes(f.size)}</td>
+        <td class="file-path-cell" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function updateMobileTotals() {
+    if (!state.mobileScan) return;
+    let totalBytes = 0;
+    let count = 0;
+
+    state.mobileScan.categories.forEach(c => {
+      if (state.selectedMobileCategories.has(c.id)) {
+        totalBytes += c.totalBytes;
+        count++;
+      }
+    });
+
+    document.getElementById('mobile-recoverable-size').textContent = formatBytes(totalBytes);
+    document.getElementById('mobile-categories-count').textContent = `${count} categorías seleccionadas`;
+    btnCleanMobile.disabled = state.selectedMobileCategories.size === 0;
+    btnBackupMobile.disabled = state.selectedMobileCategories.size === 0;
+  }
+
+  btnCleanMobile.addEventListener('click', async () => {
+    const isDry = state.mobileDryRun;
+    const catList = Array.from(state.selectedMobileCategories);
+    if (catList.length === 0) return;
+
+    const confirmMsg = isDry 
+      ? '¿Simular la limpieza en el teléfono? (No se borrará ningún archivo)'
+      : '¿Eliminar permanentemente los archivos de las categorías seleccionadas en tu teléfono?';
+
+    if (!confirm(confirmMsg)) return;
+
+    btnCleanMobile.disabled = true;
+    try {
+      const res = await fetch('/api/mobile/clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serial: state.mobileDevice.serial,
+          categories: catList,
+          dryRun: isDry
+        })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      const msg = isDry
+        ? `Simulación: Se habrían liberado ${formatBytes(data.freedBytes)} en el celular.`
+        : `¡Limpieza en el móvil completada! Se liberaron ${formatBytes(data.freedBytes)} de memoria.`;
+
+      showToast(msg, 'success');
+      logActivity(msg, 'success');
+      if (!isDry) {
+        checkMobileStatus();
+        btnScanMobile.click();
+      }
+    } catch (err) {
+      showToast(`Error al limpiar celular: ${err.message}`, 'error');
+    } finally {
+      btnCleanMobile.disabled = false;
+    }
+  });
+
+  btnBackupMobile.addEventListener('click', async () => {
+    const catList = Array.from(state.selectedMobileCategories);
+    if (catList.length === 0) return;
+
+    const backupDir = 'D:\\Backup_Samsung';
+    if (!confirm(`¿Mover los archivos seleccionados a tu PC en "${backupDir}" y luego liberarlos del teléfono?`)) return;
+
+    btnBackupMobile.disabled = true;
+    btnBackupMobile.innerHTML = '<span>Transfiriendo a PC...</span>';
+    logActivity(`Iniciando respaldo de archivos seleccionados a ${backupDir}...`, 'info');
+
+    try {
+      let totalBackedUp = 0;
+      for (const catId of catList) {
+        const cat = state.mobileScan.categories.find(c => c.id === catId);
+        if (!cat || !cat.path) continue;
+
+        const res = await fetch('/api/mobile/backup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serial: state.mobileDevice.serial,
+            remotePath: cat.path,
+            localDir: `${backupDir}\\${cat.id}`,
+            dryRun: false
+          })
+        });
+        const data = await res.json();
+        if (data.success) totalBackedUp++;
+      }
+
+      showToast(`¡Respaldo completado en ${backupDir} y espacio liberado del móvil!`, 'success');
+      logActivity(`Respaldo exitoso en ${backupDir}. Espacio en el teléfono liberado.`, 'success');
+      checkMobileStatus();
+      btnScanMobile.click();
+    } catch (err) {
+      showToast(`Error en el respaldo: ${err.message}`, 'error');
+    } finally {
+      btnBackupMobile.disabled = false;
+      btnBackupMobile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span>Mover a PC (Disco D:)</span>';
+    }
+  });
 
   // Registro de auditoría
   document.getElementById('btn-clear-logs').addEventListener('click', () => {

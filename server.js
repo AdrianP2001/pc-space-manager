@@ -9,6 +9,7 @@ const cleaner = require('./core/cleaner');
 const scanner = require('./core/scanner');
 const duplicates = require('./core/duplicates');
 const emptyFolders = require('./core/emptyFolders');
+const android = require('./core/android');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -187,6 +188,32 @@ const server = http.createServer(async (req, res) => {
       const dryRun = Boolean(body.dryRun);
       const result = emptyFolders.cleanEmptyFolders(folders, dryRun);
       return sendJson(res, 200, { success: true, ...result });
+    }
+
+
+    // Módulo Móvil (Android / Samsung vía ADB)
+    if (pathname === '/api/mobile/status' && method === 'GET') {
+      const status = await android.getDeviceStatus();
+      return sendJson(res, 200, { success: true, ...status });
+    }
+
+    if (pathname === '/api/mobile/scan' && method === 'POST') {
+      const body = await parseJsonBody(req);
+      const scanData = await android.scanMobileStorage(body.serial);
+      return sendJson(res, 200, { success: true, ...scanData });
+    }
+
+    if (pathname === '/api/mobile/clean' && method === 'POST') {
+      const body = await parseJsonBody(req);
+      const cleanData = await android.cleanMobileCategory(body.serial, body.categories || [], Boolean(body.dryRun));
+      return sendJson(res, 200, { success: true, ...cleanData });
+    }
+
+    if (pathname === '/api/mobile/backup' && method === 'POST') {
+      const body = await parseJsonBody(req);
+      const backupDir = body.localDir || 'D:\\Backup_Samsung';
+      const result = await android.backupAndClean(body.serial, body.remotePath, backupDir, Boolean(body.dryRun));
+      return sendJson(res, 200, result);
     }
 
     // Archivos estáticos del frontend
