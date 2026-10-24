@@ -61,16 +61,16 @@ jobs:
             App nativa de Android para auditoría y limpieza de almacenamiento sin intermediarios.
             
             ### ✨ Características:
-            - **WhatsApp Cleaner:** Detección de videos enviados duplicados, notas de voz .opus, imágenes y estados caducados.
+            - **WhatsApp Cleaner:** Detección de videos enviados duplicados, notas de voz `.opus`, imágenes y estados caducados.
             - **Descargas y APKs:** Limpieza de instaladores huérfanos.
             - **Caché .thumbnails de Samsung:** Depuración de la base de miniaturas oculta que suele inflarse a gigabytes.
             - **Archivos Pesados:** Listado de los archivos más pesados (>30 MB) con orden descendente.
             - **Modo Simulación:** Calcula el espacio a liberar sin borrar nada.
             
             ### 📥 Instalación:
-            1. Descarga el archivo adjunto SpaceManager-v1.0.0.apk en tu teléfono.
+            1. Descarga el archivo adjunto **`SpaceManager-v1.0.0.apk`** en tu teléfono.
             2. Toca el archivo para instalarlo.
-            3. Al abrir la app, pulsa en "Conceder Permiso" para permitir el acceso a almacenamiento.
+            3. Al abrir la app, pulsa en **"Conceder Permiso"** para permitir el acceso a almacenamiento.
           files: release-output/SpaceManager-v1.0.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
