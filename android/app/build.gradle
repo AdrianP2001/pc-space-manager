@@ -14,16 +14,29 @@ android {
         versionName "1.0.0"
     }
 
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword "spacemanager123"
+            keyAlias "spacemanager"
+            keyPassword "spacemanager123"
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            applicationIdSuffix ".debug"
+            signingConfig signingConfigs.release
             debuggable true
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

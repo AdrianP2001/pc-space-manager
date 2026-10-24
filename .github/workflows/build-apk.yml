@@ -33,13 +33,17 @@ jobs:
       - name: Compilar APK con Gradle
         run: |
           cd android
-          gradle assembleDebug --no-daemon --stacktrace
+          gradle assembleRelease --no-daemon --stacktrace
 
       - name: Preparar Instalador APK
         run: |
           mkdir -p release-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-output/SpaceManager-v1.0.0.apk
-          echo "APK generado con éxito:"
+          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk release-output/SpaceManager-v1.0.0.apk
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk release-output/SpaceManager-v1.0.0.apk
+          fi
+          echo "APK generado y firmado con éxito:"
           ls -lh release-output/SpaceManager-v1.0.0.apk
 
       - name: Subir APK como Artefacto
@@ -59,6 +63,7 @@ jobs:
             ## 📱 Space Manager para Android v1.0.0
             
             App nativa de Android para auditoría y limpieza de almacenamiento sin intermediarios.
+            Firmada de forma persistente para permitir actualizaciones directas sin desinstalar.
             
             ### ✨ Características:
             - **WhatsApp Cleaner:** Detección de videos enviados duplicados, notas de voz `.opus`, imágenes y estados caducados.
