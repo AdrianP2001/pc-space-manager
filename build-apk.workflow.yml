@@ -1,0 +1,76 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Compilar APK de Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar Código Fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Compilar APK con Gradle
+        run: |
+          cd android
+          gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Preparar Instalador APK
+        run: |
+          mkdir -p release-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-output/SpaceManager-v1.0.0.apk
+          echo "APK generado con éxito:"
+          ls -lh release-output/SpaceManager-v1.0.0.apk
+
+      - name: Subir APK como Artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpaceManager-Android-APK
+          path: release-output/SpaceManager-v1.0.0.apk
+          retention-days: 30
+
+      - name: Publicar Release en GitHub
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-apk
+          name: "Space Manager Android v1.0.0 (APK)"
+          body: |
+            ## 📱 Space Manager para Android v1.0.0
+            
+            App nativa de Android para auditoría y limpieza de almacenamiento sin intermediarios.
+            
+            ### ✨ Características:
+            - **WhatsApp Cleaner:** Detección de videos enviados duplicados, notas de voz .opus, imágenes y estados caducados.
+            - **Descargas y APKs:** Limpieza de instaladores huérfanos.
+            - **Caché .thumbnails de Samsung:** Depuración de la base de miniaturas oculta que suele inflarse a gigabytes.
+            - **Archivos Pesados:** Listado de los archivos más pesados (>30 MB) con orden descendente.
+            - **Modo Simulación:** Calcula el espacio a liberar sin borrar nada.
+            
+            ### 📥 Instalación:
+            1. Descarga el archivo adjunto SpaceManager-v1.0.0.apk en tu teléfono.
+            2. Toca el archivo para instalarlo.
+            3. Al abrir la app, pulsa en "Conceder Permiso" para permitir el acceso a almacenamiento.
+          files: release-output/SpaceManager-v1.0.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
