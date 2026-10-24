@@ -89,3 +89,16 @@ Para consultar el análisis técnico detallado sobre cómo se descompilaron los 
 
 * **Adrian Plaza**
 * Estudiante de Ingeniería de Software
+
+---
+
+## 📱 App Nativa para Android (Descarga de APK)
+
+Space Manager cuenta con su **aplicación nativa para Android (.apk)** compilada automáticamente mediante **GitHub Actions**.
+
+### ¿Cómo descargar e instalar la app en tu teléfono?
+1. Desde tu celular, ve a la sección de **Releases** de este repositorio:  
+   👉 **[Releases de Space Manager en GitHub](https://github.com/AdrianP2001/pc-space-manager/releases)**
+2. Descarga el archivo adjunto: **`SpaceManager-v1.0.0.apk`**.
+3. Abre el archivo descargado para instalarlo (habilita la opción de *Instalar aplicaciones de fuentes desconocidas* si tu teléfono lo solicita).
+4. Al abrir la app, pulsa en **"Conceder Permiso"** para otorgarle acceso al almacenamiento y poder limpiar WhatsApp, fotos y cachés.
