@@ -11,7 +11,7 @@
 </head>
 <body>
   <div class="mobile-app">
-    <!-- Header con Logo personalizado -->
+    <!-- Header con Logo personalizado y botón de Buscar Actualizaciones -->
     <header class="app-header">
       <div class="brand">
         <div class="brand-logo-wrap">
@@ -22,14 +22,40 @@
           <span class="badge-android">Mobile PRO</span>
         </div>
       </div>
-      <button class="btn-icon" id="btn-refresh" title="Actualizar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-      </button>
+      <div class="header-actions">
+        <button class="btn-icon" id="btn-check-updates" title="Buscar Actualizaciones">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span class="update-indicator-dot" id="update-indicator-dot" style="display: none;"></span>
+        </button>
+        <button class="btn-icon" id="btn-refresh" title="Actualizar Almacenamiento">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
     </header>
+
+    <!-- Banner de Nueva Versión Disponible -->
+    <div class="update-banner" id="update-banner" style="display: none;">
+      <div class="update-banner-icon">🚀</div>
+      <div class="update-banner-content">
+        <div class="update-banner-header">
+          <h4>¡Nueva versión disponible!</h4>
+          <span class="badge-version" id="update-badge-version">v1.2.0</span>
+        </div>
+        <p id="update-banner-desc">Hay una versión más reciente de Space Manager lista para instalar en tu teléfono.</p>
+        <div class="update-banner-actions">
+          <button class="btn btn-primary btn-sm" id="btn-update-now">Ver y Actualizar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-update-dismiss">Más Tarde</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Banner de Permisos de Almacenamiento -->
     <div class="permission-card" id="permission-card" style="display: none;">
@@ -142,6 +168,36 @@
       <div class="heavy-list" id="heavy-list">
         <div class="empty-state">
           <p>Presiona "Escanear Unidad" para listar los archivos más pesados.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Actualización con Notas de la Versión -->
+    <div class="update-modal-backdrop" id="update-modal" style="display: none;">
+      <div class="update-modal-card">
+        <div class="update-modal-header">
+          <div class="update-modal-title">
+            <span class="rocket">🚀</span>
+            <div>
+              <h3>Actualización Lista</h3>
+              <span class="text-dim" id="modal-version-compare">v1.1.0 ➔ v1.2.0</span>
+            </div>
+          </div>
+          <button class="btn-close" id="btn-modal-close">&times;</button>
+        </div>
+        <div class="update-notes-box" id="update-notes-box">
+          <!-- Release notes dinámicas -->
+        </div>
+        <div class="update-modal-footer">
+          <button class="btn btn-primary" id="btn-modal-download">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Descargar e Instalar (.APK)</span>
+          </button>
+          <button class="btn btn-ghost" id="btn-modal-later">Más Tarde</button>
         </div>
       </div>
     </div>

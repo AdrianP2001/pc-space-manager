@@ -5,7 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     scanData: null,
     selectedCategories: new Set(),
     dryRun: false,
-    isScanning: false
+    isScanning: false,
+    updateInfo: null
   };
 
   const hasBridge = typeof window.AndroidBridge !== 'undefined';
@@ -40,12 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
   window.onAndroidResume = function() {
     checkPermissions();
     loadStorageVolumes();
+    checkAppUpdates(false);
   };
 
   // Cargar volúmenes de almacenamiento (Interno, SD, OTG)
   function loadStorageVolumes() {
     if (!hasBridge) {
-      // Modo Demo para pruebas en navegador
       renderVolumes({
         success: true,
         deviceModel: 'Samsung Galaxy (Demo)',
@@ -110,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Seleccionar por defecto la unidad interna o la previa seleccionada
     if (!state.selectedVolume) {
       state.selectedVolume = state.volumes[0];
     } else {
@@ -151,7 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('storage-used').textContent = formatBytes(vol.usedBytes) + ' usados';
     document.getElementById('storage-free').textContent = formatBytes(vol.freeBytes) + ' libres';
 
-    const shortName = vol.name.length > 20 ? vol.name.substring(0, 18) + '...' : vol.name;
     document.getElementById('btn-scan-label').textContent = 'Escanear ' + (vol.isRemovable ? 'SD' : 'Interno');
   }
 
@@ -242,7 +241,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasBridge && typeof window.AndroidBridge.startScan === 'function') {
       window.AndroidBridge.startScan(volPath);
     } else {
-      // Simulación de escaneo con barra de progreso fluida para demo en navegador
       let p = 0;
       const stages = [
         { pct: 15, msg: 'Inspeccionando videos enviados de WhatsApp (duplicados)...' },
@@ -388,6 +386,118 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Almacenamiento actualizado');
   });
 
+  // ==========================================
+  // SISTEMA DE ACTUALIZACIONES (GITHUB RELEASES)
+  // ==========================================
+  function checkAppUpdates(isManual) {
+    if (isManual) {
+      showToast('Buscando actualizaciones en GitHub...');
+    }
+
+    if (hasBridge && typeof window.AndroidBridge.checkForUpdates === 'function') {
+      window.AndroidBridge.checkForUpdates(isManual);
+    } else {
+      // Fallback web / prueba en navegador
+      fetch('https://api.github.com/repos/AdrianP2001/pc-space-manager/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' }
+      })
+      .then(res => res.json())
+      .then(release => {
+        const tagName = release.tag_name || '';
+        let apkUrl = 'https://github.com/AdrianP2001/pc-space-manager/releases/latest';
+        if (release.assets && release.assets.length > 0) {
+          const apkAsset = release.assets.find(a => a.name.endsWith('.apk'));
+          if (apkAsset) apkUrl = apkAsset.browser_download_url;
+        }
+
+        const latestVer = tagName.replace('v', '').replace('-apk', '');
+        const currentVer = '1.1.0';
+
+        window.onUpdateCheckResult({
+          hasUpdate: latestVer !== currentVer,
+          latestVersion: latestVer,
+          currentVersion: currentVer,
+          releaseName: release.name || tagName,
+          releaseNotes: release.body || 'Nuevas mejoras de rendimiento y correcciones.',
+          apkUrl: apkUrl,
+          isManualCheck: isManual
+        });
+      })
+      .catch(err => {
+        if (isManual) showToast('Error al comprobar actualizaciones.');
+      });
+    }
+  }
+
+  window.onUpdateCheckResult = function(data) {
+    state.updateInfo = data;
+    const banner = document.getElementById('update-banner');
+    const dot = document.getElementById('update-indicator-dot');
+
+    if (data.hasUpdate) {
+      document.getElementById('update-badge-version').textContent = 'v' + data.latestVersion;
+      banner.style.display = 'flex';
+      dot.style.display = 'block';
+
+      if (data.isManualCheck) {
+        openUpdateModal();
+      }
+    } else {
+      banner.style.display = 'none';
+      dot.style.display = 'none';
+      if (data.isManualCheck) {
+        showToast('✓ Ya tienes la versión más reciente (v' + (data.currentVersion || '1.1.0') + ')');
+      }
+    }
+  };
+
+  window.onUpdateCheckError = function(isManual, errMsg) {
+    if (isManual) {
+      showToast('No se pudo verificar: ' + errMsg);
+    }
+  };
+
+  function openUpdateModal() {
+    if (!state.updateInfo) return;
+    const info = state.updateInfo;
+    document.getElementById('modal-version-compare').textContent = 'v' + info.currentVersion + ' ➔ v' + info.latestVersion;
+    document.getElementById('update-notes-box').textContent = info.releaseNotes || 'Mejoras de rendimiento y corrección de errores.';
+    document.getElementById('update-modal').style.display = 'flex';
+  }
+
+  function closeUpdateModal() {
+    document.getElementById('update-modal').style.display = 'none';
+  }
+
+  document.getElementById('btn-check-updates').addEventListener('click', () => {
+    checkAppUpdates(true);
+  });
+
+  document.getElementById('btn-update-now').addEventListener('click', () => {
+    openUpdateModal();
+  });
+
+  document.getElementById('btn-update-dismiss').addEventListener('click', () => {
+    document.getElementById('update-banner').style.display = 'none';
+  });
+
+  document.getElementById('btn-modal-close').addEventListener('click', closeUpdateModal);
+  document.getElementById('btn-modal-later').addEventListener('click', closeUpdateModal);
+
+  document.getElementById('btn-modal-download').addEventListener('click', () => {
+    if (!state.updateInfo || !state.updateInfo.apkUrl) return;
+    closeUpdateModal();
+    showToast('Iniciando descarga de actualización...');
+
+    if (hasBridge && typeof window.AndroidBridge.openUrl === 'function') {
+      window.AndroidBridge.openUrl(state.updateInfo.apkUrl);
+    } else {
+      window.open(state.updateInfo.apkUrl, '_blank');
+    }
+  });
+
+  // Inicialización
   checkPermissions();
   loadStorageVolumes();
+  setTimeout(() => { checkAppUpdates(false); }, 1500);
 });

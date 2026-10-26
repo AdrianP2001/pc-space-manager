@@ -1,20 +1,29 @@
 package com.adrian.spacemanager;
 
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.StatFs;
-import android.os.storage.StorageManager;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,10 +32,27 @@ import java.util.Locale;
 public class StorageBridge {
     private final Activity activity;
     private final WebView webView;
+    private static final String CHANNEL_ID = "space_manager_updates";
 
     public StorageBridge(Activity activity, WebView webView) {
         this.activity = activity;
         this.webView = webView;
+        createNotificationChannel();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Actualizaciones de Space Manager",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("Alertas automáticas cuando haya una nueva versión del APK disponible en GitHub.");
+            NotificationManager manager = activity.getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
     }
 
     @JavascriptInterface
@@ -50,6 +76,186 @@ public class StorageBridge {
                     activity.startActivity(intent);
                 }
             }
+        });
+    }
+
+    @JavascriptInterface
+    public String getAppVersionInfo() {
+        try {
+            PackageInfo pInfo = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
+            String vName = pInfo.versionName;
+            long vCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? pInfo.getLongVersionCode() : pInfo.versionCode;
+            JSONObject obj = new JSONObject();
+            obj.put("versionName", vName);
+            obj.put("versionCode", vCode);
+            return obj.toString();
+        } catch (Exception e) {
+            return "{\"versionName\": \"1.1.0\", \"versionCode\": 2}";
+        }
+    }
+
+    @JavascriptInterface
+    public void openUrl(String urlString) {
+        activity.runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlString));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(intent);
+            } catch (Exception e) {
+                sendError("No se pudo abrir el enlace: " + e.getMessage());
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void checkForUpdates(final boolean isManualCheck) {
+        new Thread(() -> {
+            try {
+                URL url = new URL("https://api.github.com/repos/AdrianP2001/pc-space-manager/releases/latest");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("User-Agent", "SpaceManagerApp");
+                conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+                conn.setConnectTimeout(9000);
+                conn.setReadTimeout(9000);
+
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    reader.close();
+
+                    JSONObject release = new JSONObject(sb.toString());
+                    String tagName = release.optString("tag_name", "");
+                    String releaseName = release.optString("name", tagName);
+                    String releaseBody = release.optString("body", "");
+                    String publishedAt = release.optString("published_at", "");
+
+                    // Extract APK download URL from assets
+                    String apkDownloadUrl = "";
+                    long apkSize = 0;
+                    JSONArray assets = release.optJSONArray("assets");
+                    if (assets != null) {
+                        for (int i = 0; i < assets.length(); i++) {
+                            JSONObject asset = assets.getJSONObject(i);
+                            String assetName = asset.optString("name", "");
+                            if (assetName.endsWith(".apk")) {
+                                apkDownloadUrl = asset.optString("browser_download_url", "");
+                                apkSize = asset.optLong("size", 0);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (apkDownloadUrl.isEmpty()) {
+                        apkDownloadUrl = release.optString("html_url", "https://github.com/AdrianP2001/pc-space-manager/releases/latest");
+                    }
+
+                    // Get current version
+                    String currentVersion = "1.1.0";
+                    try {
+                        PackageInfo pInfo = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
+                        currentVersion = pInfo.versionName;
+                    } catch (Exception ignored) {}
+
+                    boolean hasUpdate = isNewerVersion(tagName, currentVersion);
+
+                    JSONObject updateResult = new JSONObject();
+                    updateResult.put("hasUpdate", hasUpdate);
+                    updateResult.put("latestVersion", tagName.replace("v", "").replace("-apk", ""));
+                    updateResult.put("currentVersion", currentVersion);
+                    updateResult.put("releaseName", releaseName);
+                    updateResult.put("releaseNotes", releaseBody);
+                    updateResult.put("apkUrl", apkDownloadUrl);
+                    updateResult.put("apkSize", apkSize);
+                    updateResult.put("publishedAt", publishedAt);
+                    updateResult.put("isManualCheck", isManualCheck);
+
+                    if (hasUpdate) {
+                        showUpdateSystemNotification(updateResult.getString("latestVersion"), apkDownloadUrl);
+                    }
+
+                    sendUpdateResult(updateResult.toString());
+                } else {
+                    sendUpdateError(isManualCheck, "Respuesta del servidor: HTTP " + responseCode);
+                }
+            } catch (Exception e) {
+                sendUpdateError(isManualCheck, "Error al comprobar actualización: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private boolean isNewerVersion(String remote, String current) {
+        if (remote == null || current == null) return false;
+        String cleanRemote = remote.trim().replaceAll("^[vV]", "").replaceAll("-.*$", "");
+        String cleanCurrent = current.trim().replaceAll("^[vV]", "").replaceAll("-.*$", "");
+
+        String[] rParts = cleanRemote.split("\\.");
+        String[] cParts = cleanCurrent.split("\\.");
+        int max = Math.max(rParts.length, cParts.length);
+
+        for (int i = 0; i < max; i++) {
+            int r = (i < rParts.length) ? parseSafeInt(rParts[i]) : 0;
+            int c = (i < cParts.length) ? parseSafeInt(cParts[i]) : 0;
+            if (r > c) return true;
+            if (r < c) return false;
+        }
+        return false;
+    }
+
+    private int parseSafeInt(String s) {
+        try {
+            return Integer.parseInt(s.replaceAll("\\D+", ""));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private void showUpdateSystemNotification(String remoteVersion, String apkUrl) {
+        activity.runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+                PendingIntent pendingIntent = PendingIntent.getActivity(activity, 0, intent, flags);
+
+                int appIcon = activity.getApplicationInfo().icon;
+                if (appIcon == 0) appIcon = android.R.drawable.stat_sys_download_done;
+
+                NotificationCompat.Builder builder = new NotificationCompat.Builder(activity, CHANNEL_ID)
+                        .setSmallIcon(appIcon)
+                        .setContentTitle("🚀 Actualización Space Manager v" + remoteVersion)
+                        .setContentText("Toca aquí para descargar e instalar la nueva versión.")
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText("Hay una nueva versión disponible (v" + remoteVersion + ") en GitHub con mejoras. Toca para actualizar directamente."))
+                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                        .setAutoCancel(true)
+                        .setContentIntent(pendingIntent);
+
+                NotificationManagerCompat.from(activity).notify(2026, builder.build());
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void sendUpdateResult(String jsonResult) {
+        activity.runOnUiThread(() -> {
+            String escaped = jsonResult.replace("\\", "\\\\").replace("'", "\\'");
+            String js = "if (window.onUpdateCheckResult) window.onUpdateCheckResult(JSON.parse('" + escaped + "'));";
+            webView.evaluateJavascript(js, null);
+        });
+    }
+
+    private void sendUpdateError(boolean isManual, String errorMsg) {
+        activity.runOnUiThread(() -> {
+            String cleanErr = errorMsg.replace("\\", "\\\\").replace("'", "\\'");
+            String js = "if (window.onUpdateCheckError) window.onUpdateCheckError(" + isManual + ", '" + cleanErr + "');";
+            webView.evaluateJavascript(js, null);
         });
     }
 
@@ -377,7 +583,6 @@ public class StorageBridge {
         }
     }
 
-    // Keep backwards-compatible cleanCategory
     @JavascriptInterface
     public String cleanCategory(String categoryId, boolean dryRun) {
         return cleanCategory(categoryId, null, dryRun);
