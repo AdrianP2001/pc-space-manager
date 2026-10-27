@@ -116,6 +116,61 @@ const server = http.createServer(async (req, res) => {
 
       return sendJson(res, 200, { success: true, quickPaths });
     }
+    if (pathname === '/api/system/cloud-paths' && method === 'GET') {
+      const home = os.homedir();
+      const detected = [];
+      const oneDrive = path.join(home, 'OneDrive');
+      if (fs.existsSync(oneDrive)) {
+        detected.push({ id: 'onedrive', name: 'OneDrive', path: oneDrive, badge: '☁️ OneDrive', color: '#0078d4' });
+      }
+      const gDrive = fs.existsSync('G:\\Mi unidad') ? 'G:\\Mi unidad' : (fs.existsSync('G:\\') ? 'G:\\' : null);
+      if (gDrive) {
+        detected.push({ id: 'gdrive', name: 'Google Drive / Fotos', path: gDrive, badge: '☁️ Google Drive', color: '#34a853' });
+      }
+      const megaCandidates = [path.join(home, 'MEGAsync'), 'D:\\MEGAsync', path.join(home, 'MEGA')];
+      const megaFound = megaCandidates.find(p => fs.existsSync(p));
+      if (megaFound) {
+        detected.push({ id: 'mega', name: 'MEGA', path: megaFound, badge: '☁️ MEGA', color: '#d9272e' });
+      }
+      const picCandidates = [path.join(home, 'OneDrive', 'Imágenes'), path.join(home, 'Pictures')];
+      const picFound = picCandidates.find(p => fs.existsSync(p));
+      if (picFound) {
+        detected.push({ id: 'pictures', name: 'Imágenes / Fotos', path: picFound, badge: '📸 Fotos', color: '#8b5cf6' });
+      }
+      const downloads = path.join(home, 'Downloads');
+      if (fs.existsSync(downloads)) {
+        detected.push({ id: 'downloads', name: 'Descargas', path: downloads, badge: '📥 Descargas', color: '#06b6d4' });
+      }
+      return sendJson(res, 200, { success: true, cloudPaths: detected });
+    }
+
+    // Endpoint de streaming seguro para previsualizar fotos y comparar visualmente
+    if (pathname === '/api/media/preview' && method === 'GET') {
+      const filePath = parsedUrl.query.path;
+      if (!filePath || !fs.existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Archivo no encontrado');
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeMap = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.svg': 'image/svg+xml',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm'
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400'
+      });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
 
     if (pathname === '/api/system/reveal' && method === 'POST') {
       const body = await parseJsonBody(req);
@@ -162,7 +217,8 @@ const server = http.createServer(async (req, res) => {
       const body = await parseJsonBody(req);
       const targetPath = body.path || path.join(os.homedir(), 'Downloads');
       const minSize = Number(body.minSizeBytes) || 10240; // 10 KB mínimo por defecto
-      const result = await duplicates.scanDuplicates(targetPath, { minSizeBytes: minSize });
+      const mode = body.mode || 'exact';
+      const result = await duplicates.scanDuplicates(targetPath, { minSizeBytes: minSize, mode });
       return sendJson(res, 200, { success: true, ...result });
     }
 

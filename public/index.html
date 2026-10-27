@@ -480,6 +480,105 @@
     </div>
   </div>
 
+
+  <!-- MODAL COMPARADOR VISUAL LADO A LADO -->
+  <div class="modal-backdrop" id="photo-comparator-modal" style="display: none;">
+    <div class="modal-card modal-comparator-card">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="badge-icon" style="background: rgba(0, 242, 254, 0.15); color: #00f2fe; padding: 6px; border-radius: 8px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem;">Comparador Visual Cara a Cara</h3>
+            <span id="comp-status-badge" class="badge-status-identical">Analizando fotos...</span>
+          </div>
+        </div>
+        <button class="btn-close" id="btn-close-comparator">&times;</button>
+      </div>
+
+      <div class="modal-body comparator-body">
+        <!-- Panel Izquierdo: Foto A -->
+        <div class="comparator-column" id="comp-col-a">
+          <div class="comp-img-wrapper">
+            <img id="comp-img-a" src="" alt="Foto A" class="comp-img">
+            <span class="comp-tag-corner" id="comp-tag-a">Foto A</span>
+          </div>
+          <div class="comp-meta-card">
+            <h4 id="comp-name-a" class="comp-filename">foto1.jpg</h4>
+            <div class="comp-meta-row">
+              <span class="comp-label">Nube / Origen:</span>
+              <span id="comp-cloud-a" class="badge-cloud">Local</span>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Tamaño:</span>
+              <span id="comp-size-a">0 KB</span>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Fecha del Sensor (EXIF):</span>
+              <strong id="comp-date-a" style="color: #38bdf8;">-</strong>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Política Google:</span>
+              <span id="comp-policy-a" class="badge-policy">-</span>
+            </div>
+            <div class="comp-path-box" id="comp-path-a">C:\...</div>
+            <button class="btn btn-primary btn-block comp-btn-keep" id="btn-keep-a" style="margin-top: 14px;">
+              ✓ Conservar Esta (Eliminar la Otra)
+            </button>
+          </div>
+        </div>
+
+        <!-- Divisor Central VS -->
+        <div class="comparator-divider">
+          <div class="vs-circle">VS</div>
+          <div id="comp-diff-indicator" class="diff-tag">Comparando</div>
+        </div>
+
+        <!-- Panel Derecho: Foto B -->
+        <div class="comparator-column" id="comp-col-b">
+          <div class="comp-img-wrapper">
+            <img id="comp-img-b" src="" alt="Foto B" class="comp-img">
+            <span class="comp-tag-corner" id="comp-tag-b">Foto B</span>
+          </div>
+          <div class="comp-meta-card">
+            <h4 id="comp-name-b" class="comp-filename">foto2.jpg</h4>
+            <div class="comp-meta-row">
+              <span class="comp-label">Nube / Origen:</span>
+              <span id="comp-cloud-b" class="badge-cloud">Local</span>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Tamaño:</span>
+              <span id="comp-size-b">0 KB</span>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Fecha del Sensor (EXIF):</span>
+              <strong id="comp-date-b" style="color: #38bdf8;">-</strong>
+            </div>
+            <div class="comp-meta-row">
+              <span class="comp-label">Política Google:</span>
+              <span id="comp-policy-b" class="badge-policy">-</span>
+            </div>
+            <div class="comp-path-box" id="comp-path-b">C:\...</div>
+            <button class="btn btn-primary btn-block comp-btn-keep" id="btn-keep-b" style="margin-top: 14px;">
+              ✓ Conservar Esta (Eliminar la Otra)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.85rem; color: var(--text-dim);" id="comp-recommendation">
+          Recomendación: Verifica visualmente si son la misma toma o fotos de momentos diferentes.
+        </span>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" id="btn-keep-both">Mantener Ambas</button>
+          <button class="btn btn-secondary" id="btn-dismiss-comparator">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Notificaciones Toast flotantes -->
   <div class="toast-container" id="toast-container"></div>
 

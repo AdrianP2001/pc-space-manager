@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const metadataHelper = require('./metadataHelper');
 
 /**
  * Calcula un hash rápido de los primeros 64 KB de un archivo
@@ -38,83 +39,155 @@ function getFullHash(filePath) {
 }
 
 /**
- * Escanea un directorio en busca de archivos duplicados utilizando un algoritmo multi-fase
+ * Escanea recursivamente archivos en una o varias rutas
  */
-async function scanDuplicates(targetPath, options = {}) {
-  const { minSizeBytes = 1024, maxFiles = 30000, maxDepth = 5 } = options;
-  const absPath = path.resolve(targetPath);
+function collectFiles(targetPaths, options = {}) {
+  const { minSizeBytes = 1024, maxFiles = 40000, maxDepth = 6 } = options;
+  const filesList = [];
+  const paths = Array.isArray(targetPaths) ? targetPaths : [targetPaths];
 
-  if (!fs.existsSync(absPath)) {
-    throw new Error(`La ruta no existe: ${absPath}`);
-  }
+  for (const tPath of paths) {
+    const absPath = path.resolve(tPath);
+    if (!fs.existsSync(absPath)) continue;
 
-  // Fase 1: Agrupar por tamaño exacto
-  const sizeMap = new Map();
-  let totalFilesScanned = 0;
+    function walk(currentDir, currentDepth) {
+      if (filesList.length >= maxFiles || currentDepth > maxDepth) return;
+      let entries = [];
+      try {
+        entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch (e) {
+        return;
+      }
 
-  function walk(currentDir, currentDepth) {
-    if (totalFilesScanned >= maxFiles || currentDepth > maxDepth) return;
-    let entries = [];
-    try {
-      entries = fs.readdirSync(currentDir, { withFileTypes: true });
-    } catch (e) {
-      return;
-    }
-
-    for (const entry of entries) {
-      const fullPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === '$Recycle.Bin' || entry.name === 'node_modules' || entry.name === '.git') {
-          continue;
-        }
-        walk(fullPath, currentDepth + 1);
-      } else if (entry.isFile()) {
-        try {
-          const stat = fs.statSync(fullPath);
-          totalFilesScanned++;
-          if (stat.size >= minSizeBytes) {
-            if (!sizeMap.has(stat.size)) {
-              sizeMap.set(stat.size, []);
-            }
-            sizeMap.get(stat.size).push({
-              name: entry.name,
-              path: fullPath,
-              size: stat.size,
-              mtime: stat.mtime
-            });
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === '$Recycle.Bin' || entry.name === 'node_modules' || entry.name === '.git') {
+            continue;
           }
-        } catch (e) {
-          // Archivo inaccesible
+          walk(fullPath, currentDepth + 1);
+        } else if (entry.isFile()) {
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.size >= minSizeBytes) {
+              const meta = metadataHelper.getEnrichedMetadata(fullPath, stat);
+              filesList.push({
+                name: entry.name,
+                path: fullPath,
+                size: stat.size,
+                mtime: stat.mtime,
+                ...meta,
+                previewUrl: meta.isMedia ? `/api/media/preview?path=${encodeURIComponent(fullPath)}` : null
+              });
+            }
+          } catch (e) {
+            // Archivo protegido
+          }
         }
       }
     }
+
+    walk(absPath, 0);
   }
 
-  walk(absPath, 0);
+  return filesList;
+}
 
-  // Filtrar solo tamaños que tengan 2 o más archivos
-  const candidateGroups = [];
-  for (const [size, files] of sizeMap.entries()) {
-    if (files.length > 1) {
-      candidateGroups.push(files);
+/**
+ * Escanea en busca de duplicados o colisiones de nombre con soporte Multi-Nube y EXIF
+ */
+async function scanDuplicates(targetPath, options = {}) {
+  const {
+    minSizeBytes = 10240, // 10 KB
+    maxFiles = 40000,
+    mode = 'exact' // 'exact' | 'same_name' | 'clouds'
+  } = options;
+
+  let targetPaths = [targetPath];
+  if (Array.isArray(targetPath)) {
+    targetPaths = targetPath;
+  }
+
+  const allFiles = collectFiles(targetPaths, { minSizeBytes, maxFiles });
+  const totalFilesScanned = allFiles.length;
+
+  // ==========================================================
+  // MODO 1: Mismo Nombre pero Contenido DIFERENTE (Colisión de fotos)
+  // ==========================================================
+  if (mode === 'same_name') {
+    const nameMap = new Map();
+    for (const file of allFiles) {
+      const key = file.name.toLowerCase();
+      if (!nameMap.has(key)) nameMap.set(key, []);
+      nameMap.get(key).push(file);
     }
+
+    const collisionGroups = [];
+    for (const [name, files] of nameMap.entries()) {
+      if (files.length <= 1) continue;
+
+      // Calcular hashes para verificar si son realmente diferentes
+      for (const file of files) {
+        if (!file.hash) {
+          file.hash = await getFullHash(file.path);
+        }
+      }
+
+      // Comprobar si tienen diferente contenido
+      const uniqueHashes = new Set(files.map(f => f.hash).filter(Boolean));
+      if (uniqueHashes.size > 1) {
+        // Son fotos/archivos distintos que comparten el mismo nombre
+        collisionGroups.push({
+          groupType: 'collision',
+          name,
+          title: `Mismo Nombre "${name}", pero fotos/archivos DISTINTOS`,
+          isIdentical: false,
+          count: files.length,
+          wastedBytes: 0,
+          files
+        });
+      }
+    }
+
+    return {
+      path: Array.isArray(targetPath) ? targetPath.join(', ') : targetPath,
+      mode: 'same_name',
+      totalFilesScanned,
+      duplicateGroupsCount: collisionGroups.length,
+      totalDuplicateFiles: collisionGroups.reduce((acc, g) => acc + g.files.length, 0),
+      totalWastedBytes: 0,
+      groups: collisionGroups
+    };
   }
 
-  // Fase 2: Comparación por hash parcial (primeros 64KB)
+  // ==========================================================
+  // MODO 2 y 3: Duplicados Exactos (Mismo Contenido Binario)
+  // ==========================================================
+  // Fase 1: Agrupar por tamaño
+  const sizeMap = new Map();
+  for (const file of allFiles) {
+    if (!sizeMap.has(file.size)) sizeMap.set(file.size, []);
+    sizeMap.get(file.size).push(file);
+  }
+
+  const candidateGroups = [];
+  for (const files of sizeMap.values()) {
+    if (files.length > 1) candidateGroups.push(files);
+  }
+
+  // Fase 2: Hash parcial
   const partialGroups = new Map();
   for (const group of candidateGroups) {
     for (const file of group) {
       const pHash = await getPartialHash(file.path);
       if (!pHash) continue;
       const key = `${file.size}_${pHash}`;
-      if (!partialGroups.has(key)) {
-        partialGroups.set(key, []);
-      }
+      if (!partialGroups.has(key)) partialGroups.set(key, []);
       partialGroups.get(key).push(file);
     }
   }
 
-  // Fase 3: Comparación final por hash SHA-256 completo
+  // Fase 3: Hash SHA-256 completo
   const finalDuplicateGroups = [];
   let totalWastedBytes = 0;
   let totalDuplicateFiles = 0;
@@ -126,9 +199,8 @@ async function scanDuplicates(targetPath, options = {}) {
     for (const file of files) {
       const fullHash = await getFullHash(file.path);
       if (!fullHash) continue;
-      if (!fullGroups.has(fullHash)) {
-        fullGroups.set(fullHash, []);
-      }
+      file.hash = fullHash;
+      if (!fullGroups.has(fullHash)) fullGroups.set(fullHash, []);
       fullGroups.get(fullHash).push(file);
     }
 
@@ -138,11 +210,23 @@ async function scanDuplicates(targetPath, options = {}) {
         totalWastedBytes += wasted;
         totalDuplicateFiles += (duplicates.length - 1);
 
+        // Analizar cruce de nubes
+        const cloudNames = Array.from(new Set(duplicates.map(d => d.cloud.name)));
+        const isMultiCloud = cloudNames.length > 1;
+
+        // Comprobar política de Google
+        const hasPre2021 = duplicates.some(d => d.googlePolicy && d.googlePolicy.isPreJune2021);
+
         finalDuplicateGroups.push({
+          groupType: 'exact',
           hash,
+          isIdentical: true,
           size: duplicates[0].size,
           count: duplicates.length,
           wastedBytes: wasted,
+          isMultiCloud,
+          cloudNames,
+          hasPre2021,
           files: duplicates
         });
       }
@@ -153,7 +237,8 @@ async function scanDuplicates(targetPath, options = {}) {
   finalDuplicateGroups.sort((a, b) => b.wastedBytes - a.wastedBytes);
 
   return {
-    path: absPath,
+    path: Array.isArray(targetPath) ? targetPath.join(', ') : targetPath,
+    mode: mode === 'clouds' ? 'clouds' : 'exact',
     totalFilesScanned,
     duplicateGroupsCount: finalDuplicateGroups.length,
     totalDuplicateFiles,

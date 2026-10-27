@@ -605,37 +605,109 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnScanDup = document.getElementById('btn-scan-duplicates');
   const btnCleanDup = document.getElementById('btn-clean-duplicates');
   const dupPathInput = document.getElementById('dup-path-input');
+  const cloudChipsList = document.getElementById('cloud-chips-list');
 
+  let currentDupMode = 'exact'; // 'exact' | 'same_name' | 'clouds'
+  let detectedCloudPaths = [];
+
+  // Configuración de los botones de modo
+  const modePills = document.querySelectorAll('.dup-mode-pill');
+  modePills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      modePills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      currentDupMode = pill.dataset.mode;
+
+      const scanBtnText = document.getElementById('btn-scan-dup-text');
+      if (currentDupMode === 'same_name') {
+        scanBtnText.textContent = 'Buscar Mismo Nombre (Colisiones)';
+      } else if (currentDupMode === 'clouds') {
+        scanBtnText.textContent = 'Auditar Nubes Cruzadas';
+        if (detectedCloudPaths.length > 0) {
+          dupPathInput.value = detectedCloudPaths.map(c => c.path).join(';');
+        }
+      } else {
+        scanBtnText.textContent = 'Buscar Duplicados Exactos';
+      }
+    });
+  });
+
+  // Cargar accesos directos a nubes detectadas
+  async function loadCloudShortcuts() {
+    try {
+      const res = await fetch('/api/system/cloud-paths');
+      const data = await res.json();
+      if (!data.success || !data.cloudPaths) return;
+      detectedCloudPaths = data.cloudPaths;
+
+      cloudChipsList.innerHTML = '';
+      data.cloudPaths.forEach(cloud => {
+        const chip = document.createElement('button');
+        chip.className = 'cloud-chip';
+        chip.innerHTML = `<span style="color:${cloud.color}">${cloud.badge}</span> <span>${escapeHtml(cloud.name)}</span>`;
+        chip.title = cloud.path;
+        chip.addEventListener('click', () => {
+          dupPathInput.value = cloud.path;
+          btnScanDup.click();
+        });
+        cloudChipsList.appendChild(chip);
+      });
+
+      // Si el input está vacío, colocar la primera nube o fotos por defecto
+      if (!dupPathInput.value && data.cloudPaths.length > 0) {
+        dupPathInput.value = data.cloudPaths[0].path;
+      }
+    } catch (e) {
+      console.warn('No se pudieron cargar accesos directos de nubes:', e);
+    }
+  }
+  loadCloudShortcuts();
+
+  // Escaneo de duplicados
   btnScanDup.addEventListener('click', async () => {
-    const targetPath = dupPathInput.value.trim();
-    if (!targetPath) return;
+    const rawPath = dupPathInput.value.trim();
+    if (!rawPath) return;
+
+    const targetPaths = rawPath.includes(';') ? rawPath.split(';').map(p => p.trim()).filter(Boolean) : rawPath;
 
     btnScanDup.disabled = true;
-    btnScanDup.innerHTML = `<span>Buscando duplicados...</span>`;
-    logActivity(`Buscando archivos duplicados en: ${targetPath}...`, 'info');
+    btnScanDup.innerHTML = `<span>Analizando con metadatos EXIF...</span>`;
+    logActivity(`Iniciando análisis (${currentDupMode}) en: ${rawPath}...`, 'info');
 
     try {
       const res = await fetch('/api/duplicates/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: targetPath, minSizeBytes: 10240 })
+        body: JSON.stringify({
+          path: targetPaths,
+          minSizeBytes: 10240,
+          mode: currentDupMode
+        })
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
 
       state.duplicatesData = data;
       renderDuplicates(data);
-      showToast(`Duplicados encontrados: ${formatBytes(data.totalWastedBytes)} recuperables`, 'success');
-      logActivity(`Encontrados ${data.duplicateGroupsCount} grupos de duplicados (${formatBytes(data.totalWastedBytes)} desperdiciados)`, 'success');
+
+      if (currentDupMode === 'same_name') {
+        showToast(`Se encontraron ${data.duplicateGroupsCount} colisiones de nombre (fotos distintas)`, 'info');
+        logActivity(`Encontradas ${data.duplicateGroupsCount} colisiones de nombres con contenido diferente`, 'info');
+      } else {
+        showToast(`Duplicados encontrados: ${formatBytes(data.totalWastedBytes)} recuperables`, 'success');
+        logActivity(`Encontrados ${data.duplicateGroupsCount} grupos de duplicados (${formatBytes(data.totalWastedBytes)} desperdiciados)`, 'success');
+      }
     } catch (err) {
       logActivity(`Error al buscar duplicados: ${err.message}`, 'error');
       showToast(`Error: ${err.message}`, 'error');
     } finally {
       btnScanDup.disabled = false;
-      btnScanDup.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Buscar Duplicados</span>`;
+      const scanBtnText = document.getElementById('btn-scan-dup-text');
+      btnScanDup.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>${scanBtnText ? scanBtnText.textContent : 'Buscar Duplicados'}</span>`;
     }
   });
 
+  // Renderizado enriquecido de duplicados con miniaturas y EXIF
   function renderDuplicates(data) {
     const container = document.getElementById('duplicates-container');
     const summaryBar = document.getElementById('dup-summary-bar');
@@ -643,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (data.duplicateGroupsCount === 0) {
       summaryBar.style.display = 'none';
-      container.innerHTML = `<div class="empty-state"><p>No se encontraron archivos duplicados en este directorio.</p></div>`;
+      container.innerHTML = `<div class="empty-state"><p>No se encontraron duplicados ni colisiones en las rutas especificadas.</p></div>`;
       return;
     }
 
@@ -651,36 +723,96 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('dup-groups-count').textContent = data.duplicateGroupsCount;
     document.getElementById('dup-wasted-size').textContent = formatBytes(data.totalWastedBytes);
 
+    if (data.mode === 'same_name') {
+      document.getElementById('dup-summary-title').innerHTML = `Colisiones de Nombre Encontradas: <span id="dup-groups-count">${data.duplicateGroupsCount}</span>`;
+      document.getElementById('dup-wasted-line').innerHTML = `Fotos/archivos con el mismo nombre pero <strong>contenido distinto</strong> (Usa el comparador para no sobreescribir).`;
+    } else {
+      document.getElementById('dup-summary-title').innerHTML = `Grupos de Archivos Idénticos: <span id="dup-groups-count">${data.duplicateGroupsCount}</span>`;
+      document.getElementById('dup-wasted-line').innerHTML = `Espacio recuperable estimado: <strong id="dup-wasted-size" class="text-gradient">${formatBytes(data.totalWastedBytes)}</strong>`;
+    }
+
     state.selectedDuplicates.clear();
 
     data.groups.forEach((group, idx) => {
       const card = document.createElement('div');
       card.className = 'duplicate-group-card';
+      if (group.groupType === 'collision') {
+        card.style.borderLeft = '4px solid #f59e0b';
+      } else if (group.isMultiCloud) {
+        card.style.borderLeft = '4px solid #38bdf8';
+      }
 
       let itemsHtml = '';
       group.files.forEach((file, fIdx) => {
-        // Por defecto pre-seleccionar todos menos el primer archivo (para conservar uno seguro)
-        const isSelected = fIdx > 0;
+        // En modo exacto: preseleccionar a partir del segundo para conservar uno seguro.
+        // En modo colisión: no preseleccionar ninguno para seguridad visual.
+        const isSelected = group.groupType !== 'collision' && fIdx > 0;
         if (isSelected) state.selectedDuplicates.add(file.path);
+
+        const cloudBadgeClass = file.cloud ? `badge-cloud-${file.cloud.name.toLowerCase().replace(/\s+/g, '')}` : 'badge-cloud-local';
+        const policyBadgeClass = file.googlePolicy && file.googlePolicy.isPreJune2021 ? 'badge-policy-free' : 'badge-policy-paid';
+
+        const thumbHtml = file.isMedia && file.previewUrl ? `
+          <div class="dup-thumb-wrapper" title="Clic para ampliar y comparar" data-path="${escapeHtml(file.path)}">
+            <img src="${file.previewUrl}" class="dup-thumb" loading="lazy" alt="preview" onerror="this.parentElement.style.display='none'">
+          </div>
+        ` : `
+          <div class="dup-thumb-wrapper" style="color: #64748b;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          </div>
+        `;
 
         itemsHtml += `
           <div class="dup-item-row">
             <input type="checkbox" class="dup-check" data-path="${escapeHtml(file.path)}" ${isSelected ? 'checked' : ''}>
-            <span class="path" title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</span>
-            <span class="file-size-cell">${formatBytes(file.size)}</span>
-            <button class="btn btn-secondary btn-sm btn-reveal" data-path="${escapeHtml(file.path)}">Abrir</button>
+            ${thumbHtml}
+            <div class="dup-meta-col">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span class="path" style="font-weight: 600; color: #fff;" title="${escapeHtml(file.path)}">${escapeHtml(file.name)}</span>
+                <span class="file-size-cell">${formatBytes(file.size)}</span>
+              </div>
+              <div class="dup-meta-badges">
+                <span class="badge-cloud ${cloudBadgeClass}">${file.cloud ? file.cloud.badge : '💻 Local'}</span>
+                ${file.captureDate ? `<span class="badge-date-exif" title="Fecha exacta de captura del sensor">📷 ${escapeHtml(file.captureDate)}</span>` : ''}
+                ${file.googlePolicy ? `<span class="badge-policy ${policyBadgeClass}" title="${escapeHtml(file.googlePolicy.advice)}">${escapeHtml(file.googlePolicy.label)}</span>` : ''}
+              </div>
+              <div style="font-size: 0.73rem; color: var(--text-dim); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                ${escapeHtml(file.path)}
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm btn-reveal" data-path="${escapeHtml(file.path)}" title="Abrir en Explorador">Abrir</button>
           </div>
         `;
       });
 
+      // Cabecera del grupo con botón de comparación visual
+      const canCompare = group.files.length >= 2;
+      const compareBtnHtml = canCompare ? `
+        <button class="btn-compare-trigger" data-group-idx="${idx}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Comparar Fotos Cara a Cara</span>
+        </button>
+      ` : '';
+
+      const headerTitle = group.groupType === 'collision' ?
+        `<span style="color: #fbbf24;">⚠️ Mismo Nombre "${escapeHtml(group.name)}" (Fotos DISTINTAS)</span>` :
+        `<strong>Grupo #${idx + 1} (${group.count} copias idénticas - ${formatBytes(group.size)} c/u)</strong>`;
+
       card.innerHTML = `
-        <div class="dup-group-header">
-          <strong>Grupo #${idx + 1} (${group.count} copias idénticas - ${formatBytes(group.size)} c/u)</strong>
-          <span class="text-gradient">Espacio recuperable: ${formatBytes(group.wastedBytes)}</span>
+        <div class="dup-group-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            ${headerTitle}
+            ${group.isMultiCloud ? `<span class="badge-cloud" style="margin-left: 8px; background: rgba(0, 242, 254, 0.15); color: #00f2fe;">Multi-Nube (${group.cloudNames.join(' ➔ ')})</span>` : ''}
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            ${group.wastedBytes > 0 ? `<span class="text-gradient">Espacio recuperable: ${formatBytes(group.wastedBytes)}</span>` : ''}
+            ${compareBtnHtml}
+          </div>
         </div>
         <div class="dup-group-items">${itemsHtml}</div>
       `;
 
+      // Eventos de checkboxes
       card.querySelectorAll('.dup-check').forEach(cb => {
         cb.addEventListener('change', (e) => {
           if (e.target.checked) state.selectedDuplicates.add(cb.dataset.path);
@@ -689,9 +821,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       });
 
+      // Abrir en explorador
       card.querySelectorAll('.btn-reveal').forEach(btn => {
         btn.addEventListener('click', () => revealPath(btn.dataset.path));
       });
+
+      // Disparador del comparador visual
+      if (canCompare) {
+        card.querySelector('.btn-compare-trigger').addEventListener('click', () => {
+          openPhotoComparator(group.files[0], group.files[1], group.isIdentical);
+        });
+
+        card.querySelectorAll('.dup-thumb-wrapper').forEach(thumb => {
+          thumb.addEventListener('click', () => {
+            openPhotoComparator(group.files[0], group.files[1], group.isIdentical);
+          });
+        });
+      }
 
       container.appendChild(card);
     });
@@ -699,11 +845,123 @@ document.addEventListener('DOMContentLoaded', () => {
     btnCleanDup.disabled = state.selectedDuplicates.size === 0;
   }
 
+  // ==========================================
+  // COMPARADOR VISUAL DE FOTOS CARA A CARA
+  // ==========================================
+  const comparatorModal = document.getElementById('photo-comparator-modal');
+  const btnCloseComparator = document.getElementById('btn-close-comparator');
+  const btnDismissComparator = document.getElementById('btn-dismiss-comparator');
+  const btnKeepBoth = document.getElementById('btn-keep-both');
+  const btnKeepA = document.getElementById('btn-keep-a');
+  const btnKeepB = document.getElementById('btn-keep-b');
+
+  let activeComparatorFiles = { a: null, b: null };
+
+  function closeComparator() {
+    comparatorModal.style.display = 'none';
+  }
+
+  btnCloseComparator.addEventListener('click', closeComparator);
+  btnDismissComparator.addEventListener('click', closeComparator);
+  btnKeepBoth.addEventListener('click', () => {
+    showToast('Ambas fotos se conservarán intactas.', 'info');
+    closeComparator();
+  });
+
+  function openPhotoComparator(fileA, fileB, isIdentical) {
+    activeComparatorFiles = { a: fileA, b: fileB };
+
+    const statusBadge = document.getElementById('comp-status-badge');
+    const diffIndicator = document.getElementById('comp-diff-indicator');
+    const recommendation = document.getElementById('comp-recommendation');
+
+    if (isIdentical) {
+      statusBadge.textContent = '100% Contenido Idéntico (Mismo Hash)';
+      statusBadge.className = 'badge-policy-free';
+      diffIndicator.textContent = 'IDÉNTICAS';
+      diffIndicator.className = 'diff-tag identical';
+      recommendation.textContent = 'Las fotos son idénticas píxel a píxel. Puedes eliminar cualquiera de las dos para liberar espacio.';
+    } else {
+      statusBadge.textContent = '⚠️ ¡Contenido DIFERENTE! (No sobreescribir)';
+      statusBadge.className = 'badge-policy-paid';
+      diffIndicator.textContent = 'DIFERENTES';
+      diffIndicator.className = 'diff-tag different';
+      recommendation.textContent = '¡Cuidado! Aunque compartan el nombre, son fotos o momentos distintos. Si borras una, perderás esa captura.';
+    }
+
+    // Configurar Foto A
+    const previewA = fileA.previewUrl || '/api/media/preview?path=' + encodeURIComponent(fileA.path);
+    document.getElementById('comp-img-a').src = previewA;
+    document.getElementById('comp-name-a').textContent = fileA.name;
+    document.getElementById('comp-cloud-a').textContent = fileA.cloud ? fileA.cloud.badge : 'Local';
+    document.getElementById('comp-size-a').textContent = formatBytes(fileA.size);
+    document.getElementById('comp-date-a').textContent = fileA.captureDate || 'No detectada';
+    document.getElementById('comp-policy-a').textContent = fileA.googlePolicy ? fileA.googlePolicy.label : 'Normal';
+    document.getElementById('comp-path-a').textContent = fileA.path;
+
+    // Configurar Foto B
+    const previewB = fileB.previewUrl || '/api/media/preview?path=' + encodeURIComponent(fileB.path);
+    document.getElementById('comp-img-b').src = previewB;
+    document.getElementById('comp-name-b').textContent = fileB.name;
+    document.getElementById('comp-cloud-b').textContent = fileB.cloud ? fileB.cloud.badge : 'Local';
+    document.getElementById('comp-size-b').textContent = formatBytes(fileB.size);
+    document.getElementById('comp-date-b').textContent = fileB.captureDate || 'No detectada';
+    document.getElementById('comp-policy-b').textContent = fileB.googlePolicy ? fileB.googlePolicy.label : 'Normal';
+    document.getElementById('comp-path-b').textContent = fileB.path;
+
+    comparatorModal.style.display = 'flex';
+  }
+
+  // Acción: Conservar A (eliminar B)
+  btnKeepA.addEventListener('click', async () => {
+    if (!activeComparatorFiles.b) return;
+    if (!confirm(`¿Eliminar permanentemente la Foto B (${activeComparatorFiles.b.name}) para conservar solo la Foto A?`)) return;
+
+    try {
+      const res = await fetch('/api/duplicates/clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [activeComparatorFiles.b.path], dryRun: false })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      showToast(`Foto descartada con éxito. Se liberaron ${formatBytes(data.freedBytes)}`, 'success');
+      closeComparator();
+      btnScanDup.click();
+    } catch (e) {
+      showToast(`Error al eliminar foto: ${e.message}`, 'error');
+    }
+  });
+
+  // Acción: Conservar B (eliminar A)
+  btnKeepB.addEventListener('click', async () => {
+    if (!activeComparatorFiles.a) return;
+    if (!confirm(`¿Eliminar permanentemente la Foto A (${activeComparatorFiles.a.name}) para conservar solo la Foto B?`)) return;
+
+    try {
+      const res = await fetch('/api/duplicates/clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [activeComparatorFiles.a.path], dryRun: false })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      showToast(`Foto descartada con éxito. Se liberaron ${formatBytes(data.freedBytes)}`, 'success');
+      closeComparator();
+      btnScanDup.click();
+    } catch (e) {
+      showToast(`Error al eliminar foto: ${e.message}`, 'error');
+    }
+  });
+
+  // Eliminación masiva de duplicados seleccionados
   btnCleanDup.addEventListener('click', async () => {
     const files = Array.from(state.selectedDuplicates);
     if (files.length === 0) return;
 
-    if (!confirm(`¿Eliminar ${files.length} copias duplicadas seleccionadas?`)) return;
+    if (!confirm(`¿Eliminar las ${files.length} copias duplicadas seleccionadas?`)) return;
 
     try {
       const res = await fetch('/api/duplicates/clean', {
@@ -719,7 +977,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadDrivesAndSystem();
       btnScanDup.click();
     } catch (err) {
-      showToast(`Error al borrar duplicados: ${err.message}`, 'error');
+      logActivity(`Error al eliminar duplicados: ${err.message}`, 'error');
+      showToast(`Error: ${err.message}`, 'error');
     }
   });
 
