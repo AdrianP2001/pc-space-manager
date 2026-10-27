@@ -90,7 +90,7 @@ public class StorageBridge {
             obj.put("versionCode", vCode);
             return obj.toString();
         } catch (Exception e) {
-            return "{\"versionName\": \"1.1.0\", \"versionCode\": 2}";
+            return "{\"versionName\": \"1.2.1\", \"versionCode\": 4}";
         }
     }
 
