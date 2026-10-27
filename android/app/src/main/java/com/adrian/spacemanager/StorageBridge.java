@@ -18,6 +18,14 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.media.ExifInterface;
+import android.util.Base64;
+import java.io.ByteArrayOutputStream;
+import java.util.Map;
+import java.util.HashMap;
+
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -90,7 +98,7 @@ public class StorageBridge {
             obj.put("versionCode", vCode);
             return obj.toString();
         } catch (Exception e) {
-            return "{\"versionName\": \"1.2.1\", \"versionCode\": 4}";
+            return "{\"versionName\": \"1.3.0\", \"versionCode\": 5}";
         }
     }
 
@@ -632,4 +640,241 @@ public class StorageBridge {
             }
         }
     }
+
+    @JavascriptInterface
+    public String getThumbnailBase64(String filePath) {
+        try {
+            File f = new File(filePath);
+            if (!f.exists() || !f.isFile()) return "";
+            
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(filePath, opts);
+            
+            int sample = 1;
+            int maxDim = Math.max(opts.outWidth, opts.outHeight);
+            if (maxDim > 200) {
+                sample = maxDim / 200;
+            }
+            opts.inSampleSize = Math.max(1, sample);
+            opts.inJustDecodeBounds = false;
+            
+            Bitmap bmp = BitmapFactory.decodeFile(filePath, opts);
+            if (bmp == null) return "";
+            
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bmp.compress(Bitmap.CompressFormat.JPEG, 70, baos);
+            bmp.recycle();
+            byte[] bytes = baos.toByteArray();
+            return "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @JavascriptInterface
+    public String scanCloudPhotos(String storagePathRoot) {
+        try {
+            File root = storagePathRoot != null && !storagePathRoot.isEmpty() ? 
+                    new File(storagePathRoot) : Environment.getExternalStorageDirectory();
+            
+            List<File> searchDirs = new ArrayList<>();
+            searchDirs.add(new File(root, "DCIM/Camera"));
+            searchDirs.add(new File(root, "DCIM"));
+            searchDirs.add(new File(root, "Pictures/OneDrive"));
+            searchDirs.add(new File(root, "Pictures"));
+            searchDirs.add(new File(root, "MEGA/Camera Uploads"));
+            searchDirs.add(new File(root, "WhatsApp/Media/WhatsApp Images"));
+            searchDirs.add(new File(root, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"));
+            searchDirs.add(new File(root, "Download"));
+
+            List<JSONObject> allPhotos = new ArrayList<>();
+            Map<Long, List<JSONObject>> sizeMap = new HashMap<>();
+            Map<String, List<JSONObject>> nameMap = new HashMap<>();
+
+            int preJuneCount = 0;
+            int postJuneCount = 0;
+
+            for (File dir : searchDirs) {
+                if (!dir.exists() || !dir.isDirectory()) continue;
+                File[] files = dir.listFiles();
+                if (files == null) continue;
+
+                for (File f : files) {
+                    if (!f.isFile()) continue;
+                    String lName = f.getName().toLowerCase();
+                    if (!lName.endsWith(".jpg") && !lName.endsWith(".jpeg") && 
+                        !lName.endsWith(".png") && !lName.endsWith(".webp") && !lName.endsWith(".heic")) {
+                        continue;
+                    }
+
+                    long size = f.length();
+                    if (size < 5120) continue; // ignorar iconos < 5KB
+
+                    String dateOriginal = null;
+                    try {
+                        ExifInterface exif = new ExifInterface(f.getAbsolutePath());
+                        dateOriginal = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL);
+                        if (dateOriginal == null) dateOriginal = exif.getAttribute(ExifInterface.TAG_DATETIME);
+                    } catch (Exception ignored) {}
+
+                    // Normalizar fecha y política Google (Pre vs Post Junio 2021)
+                    boolean isPre2021 = false;
+                    String formattedDate = dateOriginal;
+                    if (dateOriginal != null && dateOriginal.length() >= 10) {
+                        formattedDate = dateOriginal.substring(0, 10).replace(":", "-") + " " + (dateOriginal.length() >= 19 ? dateOriginal.substring(11, 19) : "");
+                        if (formattedDate.compareTo("2021-06-01") < 0) {
+                            isPre2021 = true;
+                            preJuneCount++;
+                        } else {
+                            postJuneCount++;
+                        }
+                    } else {
+                        // Extraer de nombre si tiene YYYYMMDD
+                        String n = f.getName();
+                        if (n.matches(".*(20\\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\\d|3[01]).*")) {
+                            String y = n.replaceAll(".*(20\\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\\d|3[01]).*", "$1-$2-$3");
+                            formattedDate = y + " 12:00:00";
+                            if (y.compareTo("2021-06-01") < 0) {
+                                isPre2021 = true;
+                                preJuneCount++;
+                            } else {
+                                postJuneCount++;
+                            }
+                        }
+                    }
+
+                    // Detección de nube
+                    String pathStr = f.getAbsolutePath().replace("\\", "/").toLowerCase();
+                    String cloudName = "Local";
+                    String cloudBadge = "📱 Local";
+                    if (pathStr.contains("onedrive")) {
+                        cloudName = "OneDrive";
+                        cloudBadge = "☁️ OneDrive";
+                    } else if (pathStr.contains("mega")) {
+                        cloudName = "MEGA";
+                        cloudBadge = "☁️ MEGA";
+                    } else if (pathStr.contains("whatsapp")) {
+                        cloudName = "WhatsApp";
+                        cloudBadge = "💬 WhatsApp";
+                    } else if (pathStr.contains("dcim/camera")) {
+                        cloudName = "Cámara";
+                        cloudBadge = "📷 Cámara";
+                    }
+
+                    // Normalización de nombre (remover sufijos (1), (2), _1)
+                    String normName = f.getName().replaceAll("[\\s_-]*\\(\\d+\\)\\.[a-zA-Z0-9]+$", "")
+                                                .replaceAll("[\\s_-]+copia\\.[a-zA-Z0-9]+$", "")
+                                                .replaceAll("[\\s_-]+\\d{1,2}\\.[a-zA-Z0-9]+$", "")
+                                                .toLowerCase();
+
+                    JSONObject photoObj = new JSONObject();
+                    photoObj.put("name", f.getName());
+                    photoObj.put("path", f.getAbsolutePath());
+                    photoObj.put("size", size);
+                    photoObj.put("captureDate", formattedDate != null ? formattedDate : "");
+                    photoObj.put("isPreJune2021", isPre2021);
+                    photoObj.put("cloudName", cloudName);
+                    photoObj.put("cloudBadge", cloudBadge);
+                    photoObj.put("normalizedName", normName);
+
+                    allPhotos.add(photoObj);
+
+                    // Agrupar por tamaño
+                    if (!sizeMap.containsKey(size)) sizeMap.put(size, new ArrayList<>());
+                    sizeMap.get(size).add(photoObj);
+
+                    // Agrupar por nombre exacto
+                    String keyName = f.getName().toLowerCase();
+                    if (!nameMap.containsKey(keyName)) nameMap.put(keyName, new ArrayList<>());
+                    nameMap.get(keyName).add(photoObj);
+                }
+            }
+
+            // 1. Grupos de duplicados exactos (mismo tamaño)
+            JSONArray exactGroups = new JSONArray();
+            long totalWastedBytes = 0;
+            for (List<JSONObject> group : sizeMap.values()) {
+                if (group.size() > 1) {
+                    JSONObject gObj = new JSONObject();
+                    gObj.put("count", group.size());
+                    gObj.put("size", group.get(0).getLong("size"));
+                    long wasted = (group.size() - 1) * group.get(0).getLong("size");
+                    totalWastedBytes += wasted;
+                    gObj.put("wastedBytes", wasted);
+                    gObj.put("isIdentical", true);
+                    JSONArray filesArr = new JSONArray();
+                    for (JSONObject p : group) filesArr.put(p);
+                    gObj.put("files", filesArr);
+                    exactGroups.put(gObj);
+                }
+            }
+
+            // 2. Colisiones (mismo nombre, tamaño distinto)
+            JSONArray collisionGroups = new JSONArray();
+            for (Map.Entry<String, List<JSONObject>> entry : nameMap.entrySet()) {
+                if (entry.getValue().size() > 1) {
+                    List<JSONObject> group = entry.getValue();
+                    long firstSize = group.get(0).getLong("size");
+                    boolean diffSize = false;
+                    for (JSONObject p : group) {
+                        if (p.getLong("size") != firstSize) {
+                            diffSize = true;
+                            break;
+                        }
+                    }
+                    if (diffSize) {
+                        JSONObject gObj = new JSONObject();
+                        gObj.put("name", entry.getKey());
+                        gObj.put("count", group.size());
+                        gObj.put("isIdentical", false);
+                        JSONArray filesArr = new JSONArray();
+                        for (JSONObject p : group) filesArr.put(p);
+                        gObj.put("files", filesArr);
+                        collisionGroups.put(gObj);
+                    }
+                }
+            }
+
+            JSONObject res = new JSONObject();
+            res.put("success", true);
+            res.put("totalPhotosScanned", allPhotos.size());
+            res.put("preJune2021Count", preJuneCount);
+            res.put("postJune2021Count", postJuneCount);
+            res.put("totalWastedBytes", totalWastedBytes);
+            res.put("exactDuplicateGroups", exactGroups);
+            res.put("collisionGroups", collisionGroups);
+            return res.toString();
+        } catch (Exception e) {
+            return "{\"success\": false, \"error\": \"" + e.getMessage() + "\"}";
+        }
+    }
+
+    @JavascriptInterface
+    public String deleteMultipleFiles(String jsonArrayPaths) {
+        try {
+            JSONArray arr = new JSONArray(jsonArrayPaths);
+            long freed = 0;
+            int count = 0;
+            for (int i = 0; i < arr.length(); i++) {
+                String p = arr.getString(i);
+                File f = new File(p);
+                if (f.exists() && f.isFile()) {
+                    long len = f.length();
+                    if (f.delete()) {
+                        freed += len;
+                        count++;
+                    }
+                }
+            }
+            JSONObject res = new JSONObject();
+            res.put("success", true);
+            res.put("freedBytes", freed);
+            res.put("deletedCount", count);
+            return res.toString();
+        } catch (Exception e) {
+            return "{\"success\": false, \"error\": \"" + e.getMessage() + "\"}";
+        }
+    }
+
 }

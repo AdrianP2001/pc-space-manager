@@ -47,7 +47,7 @@
       <div class="update-banner-content">
         <div class="update-banner-header">
           <h4>¡Nueva versión disponible!</h4>
-          <span class="badge-version" id="update-badge-version">v1.2.1</span>
+          <span class="badge-version" id="update-badge-version">v1.3.0</span>
         </div>
         <p id="update-banner-desc">Hay una versión más reciente de Space Manager lista para instalar en tu teléfono.</p>
         <div class="update-banner-actions">
@@ -122,6 +122,7 @@
     <div class="tab-selector">
       <button class="tab-btn active" data-tab="cleaner">Limpiador Granular</button>
       <button class="tab-btn" data-tab="heavy">Archivos Pesados</button>
+      <button class="tab-btn" data-tab="clouds">Auditor Nubes</button>
     </div>
 
     <!-- Pestaña 1: Limpiador -->
@@ -172,6 +173,46 @@
       </div>
     </div>
 
+    <!-- Pestaña 3: Auditor de Nubes & Fotos -->
+    <div class="tab-content" id="tab-clouds">
+      <div class="section-title">
+        <h3>Auditor de Nubes y Fotos</h3>
+        <p class="text-dim">Detecta fotos repetidas en WhatsApp, OneDrive, MEGA y aplica la regla de Google Photos (Junio 2021).</p>
+      </div>
+
+      <div class="hero-actions" style="margin-bottom: 12px;">
+        <button class="btn btn-primary" id="btn-scan-cloud-photos">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span id="btn-scan-cloud-label">Auditar Fotos y Nubes</span>
+        </button>
+      </div>
+
+      <!-- Métricas Resumen -->
+      <div class="cloud-metrics-row" id="cloud-metrics-row" style="display: none;">
+        <div class="cloud-metric-card free">
+          <span class="m-val" id="metric-pre-june">0</span>
+          <span class="m-lbl">Pre-Jun 2021 (Google Gratis)</span>
+        </div>
+        <div class="cloud-metric-card paid">
+          <span class="m-val" id="metric-post-june">0</span>
+          <span class="m-lbl">Post-Jun 2021 (Consume Cuota)</span>
+        </div>
+        <div class="cloud-metric-card waste">
+          <span class="m-val" id="metric-wasted-size">0 MB</span>
+          <span class="m-lbl">Duplicados Recuperables</span>
+        </div>
+      </div>
+
+      <!-- Lista de Grupos -->
+      <div class="cloud-photos-list" id="cloud-photos-list">
+        <div class="empty-state">
+          <p>Presiona <strong>"Auditar Fotos y Nubes"</strong> para analizar tus fotos de cámara y nubes con lector nativo EXIF.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal de Actualización con Notas de la Versión -->
     <div class="update-modal-backdrop" id="update-modal" style="display: none;">
       <div class="update-modal-card">
@@ -180,7 +221,7 @@
             <span class="rocket">🚀</span>
             <div>
               <h3>Actualización Lista</h3>
-              <span class="text-dim" id="modal-version-compare">v1.2.0 ➔ v1.2.1</span>
+              <span class="text-dim" id="modal-version-compare">v1.2.1 ➔ v1.3.0</span>
             </div>
           </div>
           <button class="btn-close" id="btn-modal-close">&times;</button>
@@ -207,5 +248,59 @@
   </div>
 
   <script src="js/app.js"></script>
+
+  <!-- MODAL COMPARADOR FOTOS MÓVIL CARA A CARA -->
+  <div class="mobile-modal-backdrop" id="mobile-comparator-modal" style="display: none;">
+    <div class="mobile-modal-card">
+      <div class="mobile-modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">🔍</span>
+          <h4 style="margin: 0; font-size: 0.98rem;">Comparador Visual</h4>
+        </div>
+        <button class="btn-close" id="btn-close-mob-comp">&times;</button>
+      </div>
+
+      <div class="mob-comp-status" id="mob-comp-status">Analizando...</div>
+
+      <div class="mob-comp-body">
+        <!-- Foto A -->
+        <div class="mob-comp-card">
+          <div class="mob-img-box">
+            <img id="mob-img-a" src="" alt="Foto A">
+            <span class="mob-tag">Foto A</span>
+          </div>
+          <div class="mob-meta">
+            <strong id="mob-name-a" class="mob-name">foto1.jpg</strong>
+            <div class="mob-row"><span class="lbl">Origen:</span> <span id="mob-cloud-a" class="badge-sm">Cámara</span></div>
+            <div class="mob-row"><span class="lbl">Tamaño:</span> <span id="mob-size-a" class="val">0 KB</span></div>
+            <div class="mob-row"><span class="lbl">Fecha EXIF:</span> <span id="mob-date-a" class="val" style="color: #38bdf8;">-</span></div>
+            <button class="btn btn-primary btn-sm btn-block" id="btn-mob-keep-a" style="margin-top: 8px;">✓ Conservar Esta</button>
+          </div>
+        </div>
+
+        <div class="mob-vs">VS</div>
+
+        <!-- Foto B -->
+        <div class="mob-comp-card">
+          <div class="mob-img-box">
+            <img id="mob-img-b" src="" alt="Foto B">
+            <span class="mob-tag">Foto B</span>
+          </div>
+          <div class="mob-meta">
+            <strong id="mob-name-b" class="mob-name">foto2.jpg</strong>
+            <div class="mob-row"><span class="lbl">Origen:</span> <span id="mob-cloud-b" class="badge-sm">OneDrive</span></div>
+            <div class="mob-row"><span class="lbl">Tamaño:</span> <span id="mob-size-b" class="val">0 KB</span></div>
+            <div class="mob-row"><span class="lbl">Fecha EXIF:</span> <span id="mob-date-b" class="val" style="color: #38bdf8;">-</span></div>
+            <button class="btn btn-primary btn-sm btn-block" id="btn-mob-keep-b" style="margin-top: 8px;">✓ Conservar Esta</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mob-comp-footer">
+        <button class="btn btn-ghost btn-sm btn-block" id="btn-mob-dismiss">Mantener Ambas Fotos</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

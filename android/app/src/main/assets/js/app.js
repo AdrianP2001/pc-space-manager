@@ -500,4 +500,237 @@ document.addEventListener('DOMContentLoaded', () => {
   checkPermissions();
   loadStorageVolumes();
   setTimeout(() => { checkAppUpdates(false); }, 1500);
+
+  // ==========================================
+  // SECCIÓN 3: AUDITOR DE NUBES Y COMPARADOR
+  // ==========================================
+  const btnScanCloud = document.getElementById('btn-scan-cloud-photos');
+  const cloudListContainer = document.getElementById('cloud-photos-list');
+  const cloudMetricsRow = document.getElementById('cloud-metrics-row');
+
+  btnScanCloud.addEventListener('click', () => {
+    btnScanCloud.disabled = true;
+    btnScanCloud.innerHTML = '<span>Analizando galería y nubes...</span>';
+    showToast('Analizando fotos con metadatos EXIF...');
+
+    setTimeout(() => {
+      let data = null;
+      const volPath = state.selectedVolume ? state.selectedVolume.path : '';
+
+      if (hasBridge && typeof window.AndroidBridge.scanCloudPhotos === 'function') {
+        try {
+          const resStr = window.AndroidBridge.scanCloudPhotos(volPath);
+          data = JSON.parse(resStr);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      btnScanCloud.disabled = false;
+      btnScanCloud.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Auditar Fotos y Nubes</span>`;
+
+      if (!data || !data.success) {
+        showToast('No se pudieron escanear fotos o no se encontraron.');
+        return;
+      }
+
+      renderCloudAudit(data);
+      showToast(`Auditoría finalizada: ${data.totalPhotosScanned} fotos analizadas.`);
+    }, 150);
+  });
+
+  function renderCloudAudit(data) {
+    cloudMetricsRow.style.display = 'grid';
+    document.getElementById('metric-pre-june').textContent = data.preJune2021Count;
+    document.getElementById('metric-post-june').textContent = data.postJune2021Count;
+    document.getElementById('metric-wasted-size').textContent = formatBytes(data.totalWastedBytes);
+
+    cloudListContainer.innerHTML = '';
+
+    const exact = data.exactDuplicateGroups || [];
+    const collisions = data.collisionGroups || [];
+
+    if (exact.length === 0 && collisions.length === 0) {
+      cloudListContainer.innerHTML = `<div class="empty-state"><p>¡Excelente! No tienes fotos duplicadas ni colisiones de nombre en esta unidad.</p></div>`;
+      return;
+    }
+
+    // 1. Mostrar colisiones primero (fotos distintas con el mismo nombre)
+    collisions.forEach((group, idx) => {
+      const card = document.createElement('div');
+      card.className = 'mob-group-card';
+      card.style.borderLeft = '4px solid #f59e0b';
+
+      let itemsHtml = '';
+      group.files.forEach(f => {
+        let thumbSrc = 'img/logo.png';
+        if (hasBridge && typeof window.AndroidBridge.getThumbnailBase64 === 'function') {
+          const b64 = window.AndroidBridge.getThumbnailBase64(f.path);
+          if (b64) thumbSrc = b64;
+        }
+
+        itemsHtml += `
+          <div class="mob-photo-row">
+            <img src="${thumbSrc}" class="mob-photo-thumb" alt="thumb">
+            <div class="mob-photo-info">
+              <span class="mob-photo-title">${escapeHtml(f.name)}</span>
+              <div class="mob-photo-badges">
+                <span class="badge-sm" style="color: #38bdf8;">${f.cloudBadge}</span>
+                <span class="badge-sm">${formatBytes(f.size)}</span>
+                ${f.captureDate ? `<span class="badge-sm" style="color: #a5f3fc;">📷 ${escapeHtml(f.captureDate)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      card.innerHTML = `
+        <div class="mob-group-header">
+          <span style="color: #fbbf24;">⚠️ Mismo Nombre: "${escapeHtml(group.name)}" (DISTINTAS)</span>
+          <button class="btn btn-secondary btn-sm btn-mob-compare">Comparar</button>
+        </div>
+        <div>${itemsHtml}</div>
+      `;
+
+      card.querySelector('.btn-mob-compare').addEventListener('click', () => {
+        openMobileComparator(group.files[0], group.files[1], false);
+      });
+
+      cloudListContainer.appendChild(card);
+    });
+
+    // 2. Mostrar duplicados exactos
+    exact.forEach((group, idx) => {
+      const card = document.createElement('div');
+      card.className = 'mob-group-card';
+      card.style.borderLeft = '4px solid #10b981';
+
+      let itemsHtml = '';
+      group.files.forEach(f => {
+        let thumbSrc = 'img/logo.png';
+        if (hasBridge && typeof window.AndroidBridge.getThumbnailBase64 === 'function') {
+          const b64 = window.AndroidBridge.getThumbnailBase64(f.path);
+          if (b64) thumbSrc = b64;
+        }
+
+        const policyBadge = f.isPreJune2021
+          ? '<span class="badge-sm" style="color: #34d399;">Google Gratis (Pre-2021)</span>'
+          : '<span class="badge-sm" style="color: #fbbf24;">Consume Cuota</span>';
+
+        itemsHtml += `
+          <div class="mob-photo-row">
+            <img src="${thumbSrc}" class="mob-photo-thumb" alt="thumb">
+            <div class="mob-photo-info">
+              <span class="mob-photo-title">${escapeHtml(f.name)}</span>
+              <div class="mob-photo-badges">
+                <span class="badge-sm" style="color: #38bdf8;">${f.cloudBadge}</span>
+                <span class="badge-sm">${formatBytes(f.size)}</span>
+                ${policyBadge}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      card.innerHTML = `
+        <div class="mob-group-header">
+          <span>Grupo #${idx + 1} (${group.count} copias idénticas)</span>
+          <button class="btn btn-secondary btn-sm btn-mob-compare">Comparar</button>
+        </div>
+        <div>${itemsHtml}</div>
+      `;
+
+      card.querySelector('.btn-mob-compare').addEventListener('click', () => {
+        openMobileComparator(group.files[0], group.files[1], true);
+      });
+
+      cloudListContainer.appendChild(card);
+    });
+  }
+
+  // ==========================================
+  // MODAL COMPARADOR MÓVIL
+  // ==========================================
+  const mobCompModal = document.getElementById('mobile-comparator-modal');
+  const btnCloseMobComp = document.getElementById('btn-close-mob-comp');
+  const btnMobDismiss = document.getElementById('btn-mob-dismiss');
+  const btnMobKeepA = document.getElementById('btn-mob-keep-a');
+  const btnMobKeepB = document.getElementById('btn-mob-keep-b');
+
+  let activeMobFiles = { a: null, b: null };
+
+  function closeMobComparator() {
+    mobCompModal.style.display = 'none';
+  }
+
+  btnCloseMobComp.addEventListener('click', closeMobComparator);
+  btnMobDismiss.addEventListener('click', closeMobComparator);
+
+  function openMobileComparator(fileA, fileB, isIdentical) {
+    activeMobFiles = { a: fileA, b: fileB };
+
+    const status = document.getElementById('mob-comp-status');
+    if (isIdentical) {
+      status.textContent = '✓ 100% IDÉNTICAS (Mismo archivo / puedes borrar cualquiera)';
+      status.style.color = '#34d399';
+    } else {
+      status.textContent = '⚠️ ¡FOTOS DISTINTAS! (Mismo nombre pero tomas diferentes)';
+      status.style.color = '#fbbf24';
+    }
+
+    // Cargar thumbnails grandes
+    let thumbA = 'img/logo.png';
+    let thumbB = 'img/logo.png';
+    if (hasBridge && typeof window.AndroidBridge.getThumbnailBase64 === 'function') {
+      const a = window.AndroidBridge.getThumbnailBase64(fileA.path);
+      const b = window.AndroidBridge.getThumbnailBase64(fileB.path);
+      if (a) thumbA = a;
+      if (b) thumbB = b;
+    }
+
+    document.getElementById('mob-img-a').src = thumbA;
+    document.getElementById('mob-name-a').textContent = fileA.name;
+    document.getElementById('mob-cloud-a').textContent = fileA.cloudBadge || fileA.cloudName;
+    document.getElementById('mob-size-a').textContent = formatBytes(fileA.size);
+    document.getElementById('mob-date-a').textContent = fileA.captureDate || 'No detectada';
+
+    document.getElementById('mob-img-b').src = thumbB;
+    document.getElementById('mob-name-b').textContent = fileB.name;
+    document.getElementById('mob-cloud-b').textContent = fileB.cloudBadge || fileB.cloudName;
+    document.getElementById('mob-size-b').textContent = formatBytes(fileB.size);
+    document.getElementById('mob-date-b').textContent = fileB.captureDate || 'No detectada';
+
+    mobCompModal.style.display = 'flex';
+  }
+
+  btnMobKeepA.addEventListener('click', () => {
+    if (!activeMobFiles.b) return;
+    if (!confirm(`¿Eliminar Foto B (${activeMobFiles.b.name}) y conservar solo Foto A?`)) return;
+
+    if (hasBridge && typeof window.AndroidBridge.deleteMultipleFiles === 'function') {
+      const resStr = window.AndroidBridge.deleteMultipleFiles(JSON.stringify([activeMobFiles.b.path]));
+      try {
+        const res = JSON.parse(resStr);
+        showToast(`Foto descartada (${formatBytes(res.freedBytes)} liberados)`);
+      } catch (e) {}
+    }
+    closeMobComparator();
+    btnScanCloud.click();
+  });
+
+  btnMobKeepB.addEventListener('click', () => {
+    if (!activeMobFiles.a) return;
+    if (!confirm(`¿Eliminar Foto A (${activeMobFiles.a.name}) y conservar solo Foto B?`)) return;
+
+    if (hasBridge && typeof window.AndroidBridge.deleteMultipleFiles === 'function') {
+      const resStr = window.AndroidBridge.deleteMultipleFiles(JSON.stringify([activeMobFiles.a.path]));
+      try {
+        const res = JSON.parse(resStr);
+        showToast(`Foto descartada (${formatBytes(res.freedBytes)} liberados)`);
+      } catch (e) {}
+    }
+    closeMobComparator();
+    btnScanCloud.click();
+  });
+
 });
